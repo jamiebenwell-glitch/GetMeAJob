@@ -261,10 +261,12 @@ class RoleSuggestion:
     title: str
     company: str
     location: str
+    duration: str
     apply_url: str
     score: int
     matched_keywords: list[str]
     summary: str
+    job_description: str
 
 
 def _read_text(path: str | Path) -> str:
@@ -503,10 +505,18 @@ def recommend_roles(cv_text: str, jobs: list[dict[str, object]], limit: int = 5)
             title=str(job.get("title") or "Untitled role"),
             company=str(job.get("company") or "Unknown company"),
             location=str(job.get("location") or "Location not listed"),
+            duration=str(job.get("duration") or "Duration not listed"),
             apply_url=str(job.get("apply_url") or ""),
             score=max(score, 20),
             matched_keywords=matched[:6],
             summary=str(job.get("summary") or ""),
+            job_description=(
+                f"{str(job.get('title') or '')}\n"
+                f"{str(job.get('location') or '')}\n"
+                f"{str(job.get('summary') or '')}\n"
+                "Requirements:\n- "
+                + "\n- ".join(str(item) for item in (job.get("key_requirements") or []))
+            ).strip(),
         )
         ranked.append((score, suggestion))
 

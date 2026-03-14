@@ -302,3 +302,110 @@ def test_browser_results_stay_in_workspace() -> None:
     finally:
         process.terminate()
         process.wait(timeout=10)
+
+
+def test_browser_persists_filters_and_drafts_after_refresh() -> None:
+    port = _get_free_port()
+    env = os.environ.copy()
+    env["PYTHONPATH"] = "src"
+
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "getmeajob.webapp:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+        ],
+        cwd=ROOT,
+        env=env,
+    )
+
+    try:
+        _wait_for_server(f"http://127.0.0.1:{port}")
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            page = browser.new_page()
+            page.goto(f"http://127.0.0.1:{port}", wait_until="networkidle")
+
+            page.get_by_placeholder("Search title, company, location, summary").fill("engineer")
+            page.get_by_label("Remote only").check()
+            page.locator(".set").nth(0).get_by_label("Job advert URL").fill("https://example.com/test-role")
+            page.locator(".set").nth(0).get_by_label("Job description").fill("Saved draft job description")
+            page.reload(wait_until="networkidle")
+
+            assert page.get_by_placeholder("Search title, company, location, summary").input_value() == "engineer"
+            assert page.get_by_label("Remote only").is_checked()
+            assert page.locator(".set").nth(0).get_by_label("Job advert URL").input_value() == "https://example.com/test-role"
+            assert page.locator(".set").nth(0).get_by_label("Job description").input_value() == "Saved draft job description"
+            page.get_by_role("button", name="Reset filters").click()
+            assert page.get_by_placeholder("Search title, company, location, summary").input_value() == ""
+            assert not page.get_by_label("Remote only").is_checked()
+
+            browser.close()
+    finally:
+        process.terminate()
+        process.wait(timeout=10)
+
+
+def test_browser_role_suggestion_loads_into_reviewer() -> None:
+    port = _get_free_port()
+    env = os.environ.copy()
+    env["PYTHONPATH"] = "src"
+
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "getmeajob.webapp:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+        ],
+        cwd=ROOT,
+        env=env,
+    )
+
+    try:
+        _wait_for_server(f"http://127.0.0.1:{port}")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            cv_path = temp_path / "cv.txt"
+            cover_path = temp_path / "cover.txt"
+            cv_path.write_text(
+                "Software and engineering student with backend, cloud, and test automation experience.",
+                encoding="utf-8",
+            )
+            cover_path.write_text(
+                "I can contribute to engineering teams with testing, automation, and backend delivery.",
+                encoding="utf-8",
+            )
+
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch()
+                page = browser.new_page(viewport={"width": 1440, "height": 1200})
+                page.goto(f"http://127.0.0.1:{port}", wait_until="networkidle")
+
+                page.locator(".set").nth(0).get_by_label("Job description").fill(
+                    "Engineering role with backend, automation, testing, and cloud requirements."
+                )
+                page.locator(".set").nth(0).get_by_label("CV file").set_input_files(str(cv_path))
+                page.locator(".set").nth(0).get_by_label("Cover letter file").set_input_files(str(cover_path))
+                page.get_by_role("button", name="Review", exact=True).click(no_wait_after=True)
+
+                page.wait_for_selector("#workspace-results")
+                page.get_by_role("button", name="Load into reviewer").last.click()
+                page.locator('[data-tab-trigger="reviewer"]').click()
+                assert page.locator(".set").nth(0).get_by_label("Job advert URL").input_value().startswith("https://")
+                assert len(page.locator(".set").nth(0).get_by_label("Job description").input_value()) > 30
+
+                browser.close()
+    finally:
+        process.terminate()
+        process.wait(timeout=10)

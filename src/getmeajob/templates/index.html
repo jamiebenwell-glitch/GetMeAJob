@@ -98,6 +98,10 @@
               <span>Remote only</span>
             </label>
           </div>
+          <div class="filter-tools">
+            <p id="active-filters" class="active-filters">No active filters</p>
+            <button type="button" class="ghost filter-reset" id="job-filter-reset">Reset filters</button>
+          </div>
 
           <div class="jobs-grid" id="jobs-grid">
             {% for job in jobs %}
@@ -196,9 +200,12 @@
 
                   <div class="set-header">
                     <h3>Application {{ application.index }}</h3>
-                    <button type="button" class="ghost remove-set" {% if loop.first and applications|length == 1 %}disabled{% endif %}>
-                      Remove
-                    </button>
+                    <div class="set-controls">
+                      <button type="button" class="ghost reset-set">Reset</button>
+                      <button type="button" class="ghost remove-set" {% if loop.first and applications|length == 1 %}disabled{% endif %}>
+                        Remove
+                      </button>
+                    </div>
                   </div>
 
                   <label>
@@ -387,9 +394,20 @@
                               <span class="suggestion-score">{{ suggestion.score }}%</span>
                             </div>
                             <p class="suggestion-meta">{{ suggestion.location }}</p>
+                            <p class="suggestion-meta">{{ suggestion.duration }}</p>
                             <p class="suggestion-summary">{{ suggestion.summary }}</p>
                             <p class="suggestion-keywords"><b>CV match:</b> {{ suggestion.matched_keywords | join(", ") }}</p>
-                            <a class="secondary suggestion-link" href="{{ suggestion.apply_url }}" target="_blank" rel="noopener noreferrer">Open role</a>
+                            <div class="suggestion-actions">
+                              <button
+                                type="button"
+                                class="secondary use-suggestion"
+                                data-job-url="{{ suggestion.apply_url }}"
+                                data-job-description="{{ suggestion.job_description | e }}"
+                              >
+                                Load into reviewer
+                              </button>
+                              <a class="secondary suggestion-link" href="{{ suggestion.apply_url }}" target="_blank" rel="noopener noreferrer">Open role</a>
+                            </div>
                           </article>
                           {% endfor %}
                         </div>

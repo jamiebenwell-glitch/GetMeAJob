@@ -282,6 +282,26 @@ body {
   margin-bottom: 14px;
 }
 
+.filter-tools {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.active-filters {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.filter-reset {
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
 .job-filters > :first-child {
   grid-column: span 2;
 }
@@ -365,6 +385,13 @@ textarea {
   justify-content: space-between;
   align-items: start;
   gap: 12px;
+}
+
+.set-controls,
+.suggestion-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .job-company,
@@ -781,6 +808,11 @@ label {
   margin-top: 12px;
 }
 
+.suggestion-actions .suggestion-link,
+.suggestion-actions .use-suggestion {
+  margin-top: 0;
+}
+
 .markup-stack {
   display: grid;
   gap: 16px;
@@ -908,6 +940,7 @@ label {
   .panel-head,
   .workspace-panel-head,
   .job-actions,
+  .filter-tools,
   .actions,
   .result-topline,
   .set-header,
