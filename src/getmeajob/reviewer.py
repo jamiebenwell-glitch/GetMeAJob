@@ -171,6 +171,81 @@ IMPACT_VERBS = {
     "streamlined",
 }
 
+ROLE_FAMILY_HINTS: dict[str, set[str]] = {
+    "software": {
+        "api",
+        "backend",
+        "cloud",
+        "developer",
+        "devops",
+        "frontend",
+        "full-stack",
+        "fullstack",
+        "java",
+        "javascript",
+        "microservices",
+        "node",
+        "python",
+        "react",
+        "software",
+    },
+    "mechanical": {
+        "cad",
+        "cfd",
+        "fem",
+        "manufacturing",
+        "mechanical",
+        "prototype",
+        "solidworks",
+        "thermodynamics",
+        "tooling",
+    },
+    "electrical": {
+        "circuit",
+        "electrical",
+        "electronic",
+        "embedded",
+        "firmware",
+        "fpga",
+        "pcb",
+    },
+    "data": {
+        "analytics",
+        "data",
+        "etl",
+        "machine",
+        "learning",
+        "ml",
+        "sql",
+    },
+    "civil": {
+        "civil",
+        "geotechnical",
+        "infrastructure",
+        "structural",
+    },
+}
+
+SENIORITY_PATTERNS: list[tuple[int, tuple[str, ...]]] = [
+    (4, ("principal", "staff engineer", "head of", "architect")),
+    (3, ("lead", "manager", "senior manager")),
+    (2, ("senior", "sr ")),
+    (0, ("junior", "graduate", "entry level", "associate")),
+    (-1, ("intern", "internship", "placement", "year in industry", "student", "undergraduate")),
+]
+
+EARLY_STAGE_PATTERNS = (
+    "undergraduate",
+    "student",
+    "intern",
+    "internship",
+    "placement",
+    "year in industry",
+    "industrial placement",
+    "graduate scheme",
+    "final year",
+)
+
 CATEGORY_HINTS: dict[str, set[str]] = {
     "technical": {
         "analysis",
@@ -319,6 +394,110 @@ def _extract_company_name(job_text: str) -> str | None:
     if match:
         return match.group(1).strip()
     return None
+
+
+def _extract_years_of_experience(text: str) -> int:
+    matches = re.findall(r"(?i)(\d+)\+?\s*(?:years?|yrs?)(?:\s+of)?\s+(?:experience|exp)?", text)
+    values = [int(match) for match in matches]
+    return max(values, default=0)
+
+
+def _detect_job_seniority(job_text: str) -> int:
+    normalized = f" {job_text.lower()} "
+    years_required = _extract_years_of_experience(job_text)
+    level = 1
+
+    for score, patterns in SENIORITY_PATTERNS:
+        if any(pattern in normalized for pattern in patterns):
+            level = max(level, score)
+
+    if years_required >= 8:
+        level = max(level, 4)
+    elif years_required >= 5:
+        level = max(level, 3)
+    elif years_required >= 3:
+        level = max(level, 2)
+    elif years_required >= 1:
+        level = max(level, 1)
+
+    return level
+
+
+def _detect_candidate_seniority(cv_text: str, cover_text: str) -> int:
+    combined = f" {cv_text.lower()} {cover_text.lower()} "
+    if any(pattern in combined for pattern in EARLY_STAGE_PATTERNS):
+        return -1
+
+    years = max(_extract_years_of_experience(cv_text), _extract_years_of_experience(cover_text))
+    if years >= 8:
+        return 4
+    if years >= 5:
+        return 3
+    if years >= 3:
+        return 2
+    if years >= 1:
+        return 1
+    return 0
+
+
+def _role_family_scores(text: str) -> dict[str, int]:
+    tokens = Counter(_tokenize(text))
+    scores: dict[str, int] = {}
+    for family, hints in ROLE_FAMILY_HINTS.items():
+        score = sum(tokens.get(hint, 0) for hint in hints)
+        if score > 0:
+            scores[family] = score
+    return scores
+
+
+def _dominant_families(text: str) -> set[str]:
+    scores = _role_family_scores(text)
+    if not scores:
+        return set()
+    top_score = max(scores.values())
+    if top_score <= 1:
+        return set()
+    return {family for family, score in scores.items() if score == top_score}
+
+
+def _fit_caps(job_text: str, cv_text: str, cover_text: str) -> tuple[int, int, list[str]]:
+    notes: list[str] = []
+    total_cap = 100
+    relevance_cap = 100
+
+    job_level = _detect_job_seniority(job_text)
+    candidate_level = _detect_candidate_seniority(cv_text, cover_text)
+    required_years = _extract_years_of_experience(job_text)
+    candidate_years = max(_extract_years_of_experience(cv_text), _extract_years_of_experience(cover_text))
+
+    if job_level >= 3 and candidate_level <= 0:
+        total_cap = min(total_cap, 35)
+        relevance_cap = min(relevance_cap, 30)
+        notes.append("This role reads as experienced or senior, but the application reads as student or early-career.")
+    elif job_level - candidate_level >= 2:
+        total_cap = min(total_cap, 45)
+        relevance_cap = min(relevance_cap, 40)
+        notes.append("The application looks under-level for the seniority expected by this role.")
+
+    if required_years >= 3 and candidate_years == 0 and candidate_level <= 0:
+        total_cap = min(total_cap, 40)
+        relevance_cap = min(relevance_cap, 35)
+        notes.append(f"The advert asks for around {required_years}+ years of experience, and that evidence is missing here.")
+    elif required_years >= 5 and candidate_years < max(required_years - 2, 1):
+        total_cap = min(total_cap, 45)
+        relevance_cap = min(relevance_cap, 40)
+        notes.append("The documented years of experience appear well below the level requested in the advert.")
+
+    job_families = _dominant_families(job_text)
+    candidate_families = _dominant_families(f"{cv_text} {cover_text}")
+    if job_families and candidate_families and not (job_families & candidate_families):
+        total_cap = min(total_cap, 25)
+        relevance_cap = min(relevance_cap, 20)
+        notes.append(
+            "This looks like a role-family mismatch: the advert and the application point to different disciplines."
+        )
+
+    return total_cap, relevance_cap, notes
 
 
 def _word_count(text: str) -> int:
@@ -500,6 +679,12 @@ def recommend_roles(cv_text: str, jobs: list[dict[str, object]], limit: int = 5)
         requirement_hits = len(requirement_tokens & cv_tokens)
         base_score = int(round(100 * len(matched) / len(job_keywords)))
         score = min(99, base_score + title_hits * 7 + requirement_hits * 2)
+        total_cap, _, _ = _fit_caps(text, cv_text, "")
+        score = min(score, total_cap)
+        if total_cap <= 35:
+            score = min(score, 15)
+        elif total_cap >= 80:
+            score = max(score, 25)
 
         suggestion = RoleSuggestion(
             title=str(job.get("title") or "Untitled role"),
@@ -507,7 +692,7 @@ def recommend_roles(cv_text: str, jobs: list[dict[str, object]], limit: int = 5)
             location=str(job.get("location") or "Location not listed"),
             duration=str(job.get("duration") or "Duration not listed"),
             apply_url=str(job.get("apply_url") or ""),
-            score=max(score, 20),
+            score=max(score, 10),
             matched_keywords=matched[:6],
             summary=str(job.get("summary") or ""),
             job_description=(
@@ -531,6 +716,9 @@ def review(job_text: str, cv_text: str, cover_text: str) -> ReviewResult:
     specificity = _score_specificity(cv_text, cover_text)
     structure = _score_structure(cv_text, cover_text)
     clarity = _score_clarity([cv_text, cover_text])
+    total_cap, relevance_cap, fit_notes = _fit_caps(job_text, cv_text, cover_text)
+
+    relevance = min(relevance, relevance_cap)
 
     total = int(
         round(
@@ -541,8 +729,9 @@ def review(job_text: str, cv_text: str, cover_text: str) -> ReviewResult:
             + clarity * 0.1
         )
     )
+    total = min(total, total_cap)
 
-    notes: list[str] = []
+    notes: list[str] = list(fit_notes)
     low_categories = [category.label for category in categories if category.coverage < 50]
     if low_categories:
         notes.append(f"Strengthen weak requirement areas: {', '.join(low_categories[:3])}.")

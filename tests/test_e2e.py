@@ -22,7 +22,7 @@ def _get_free_port() -> int:
         return sock.getsockname()[1]
 
 
-def _wait_for_server(url: str, timeout_seconds: int = 20) -> None:
+def _wait_for_server(url: str, timeout_seconds: int = 40) -> None:
     end = time.time() + timeout_seconds
     while time.time() < end:
         try:

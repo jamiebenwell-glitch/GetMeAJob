@@ -50,3 +50,46 @@ def test_reviewer_recommends_roles_from_cv() -> None:
     assert suggestions
     assert suggestions[0].company == "Acme"
     assert "cad" in suggestions[0].matched_keywords
+
+
+def test_reviewer_caps_student_application_for_senior_software_role() -> None:
+    result = review(
+        "Senior Software Engineer. Build backend APIs, cloud services, and distributed systems. Requires 5+ years of software engineering experience.",
+        "Mechanical engineering undergraduate with CAD, testing, and manufacturing project experience. Completed a year in industry.",
+        "I am an undergraduate student and I want to apply because I am interested in software and engineering.",
+    )
+
+    assert result.score.total <= 35
+    assert result.score.relevance <= 30
+    assert any("senior" in note.lower() or "early-career" in note.lower() for note in result.notes)
+    assert any("5+" in note or "years of experience" in note.lower() for note in result.notes)
+
+
+def test_recommend_roles_penalizes_senior_roles_for_student_cv() -> None:
+    suggestions = recommend_roles(
+        "Computer science undergraduate student with Python, APIs, and web app coursework.",
+        [
+            {
+                "title": "Senior Software Engineer",
+                "company": "BigCo",
+                "location": "London, United Kingdom",
+                "summary": "Own backend systems and mentor engineers. Requires 5+ years of software engineering experience.",
+                "key_requirements": ["Python", "APIs", "cloud", "mentoring"],
+                "apply_url": "https://example.com/senior",
+            },
+            {
+                "title": "Graduate Software Engineer",
+                "company": "GradCo",
+                "location": "Manchester, United Kingdom",
+                "summary": "Entry-level software engineering role focused on Python and APIs.",
+                "key_requirements": ["Python", "APIs", "testing"],
+                "apply_url": "https://example.com/graduate",
+            },
+        ],
+    )
+
+    assert suggestions
+    assert suggestions[0].title == "Graduate Software Engineer"
+    senior = next(item for item in suggestions if item.title == "Senior Software Engineer")
+    graduate = next(item for item in suggestions if item.title == "Graduate Software Engineer")
+    assert senior.score < graduate.score
