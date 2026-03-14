@@ -27,7 +27,7 @@
           </div>
           <a class="ghost auth-button" href="/auth/logout">Sign out</a>
           {% elif auth_enabled %}
-          <a class="primary auth-button" href="/auth/login/google">Sign in with Google</a>
+          <a class="primary auth-button" href="/auth/login/google?next={{ auth_next | urlencode }}">Sign in with Google</a>
           {% else %}
           <span class="auth-note">Google login not configured</span>
           {% endif %}
@@ -36,10 +36,17 @@
     </header>
 
     <main class="page-shell">
+      {% if auth_error %}
+      <section class="auth-banner auth-banner-error">
+        <strong>Google sign-in failed</strong>
+        <span>{{ auth_error }}</span>
+      </section>
+      {% endif %}
       {% block content %}{% endblock %}
     </main>
 
     <script id="page-user" type="application/json">{{ (user or {}) | tojson }}</script>
+    <script id="page-auth-status" type="application/json">{{ auth_status | tojson }}</script>
     <script src="/static/app.js"></script>
   </body>
 </html>

@@ -42,6 +42,7 @@ def run_server():
         env["PYTHONPATH"] = "src"
         env["TESTING"] = "1"
         env["GETMEAJOB_DB_PATH"] = str(Path(temp_dir) / "test_app.db")
+        env["SESSION_HTTPS_ONLY"] = "0"
 
         process = subprocess.Popen(
             [

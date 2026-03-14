@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.middleware.sessions import SessionMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from getmeajob.ingest import extract_job_text_from_url, extract_text_from_bytes
 from getmeajob.reviewer import recommend_roles, review
@@ -41,11 +42,12 @@ GOOGLE_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configura
 
 
 app = FastAPI(title="GetMeAJob Reviewer")
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("SESSION_SECRET", "dev-session-secret-change-me"),
     same_site="lax",
-    https_only=os.getenv("SESSION_HTTPS_ONLY", "0") == "1",
+    https_only=os.getenv("SESSION_HTTPS_ONLY", "1") == "1",
 )
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -76,6 +78,42 @@ def _startup() -> None:
 
 def _auth_enabled() -> bool:
     return hasattr(oauth, "google")
+
+
+def _public_base_url(request: Request) -> str:
+    configured = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if configured:
+        return configured
+
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").strip()
+    forwarded_host = request.headers.get("x-forwarded-host", "").strip()
+    if forwarded_proto and forwarded_host:
+        return f"{forwarded_proto}://{forwarded_host}".rstrip("/")
+
+    return str(request.base_url).rstrip("/")
+
+
+def _auth_status(request: Request) -> dict[str, Any]:
+    client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
+    session_secret = os.getenv("SESSION_SECRET", "").strip()
+    auth_enabled = _auth_enabled()
+    missing: list[str] = []
+    if not client_id:
+        missing.append("GOOGLE_CLIENT_ID")
+    if not client_secret:
+        missing.append("GOOGLE_CLIENT_SECRET")
+    if not session_secret:
+        missing.append("SESSION_SECRET")
+
+    return {
+        "enabled": auth_enabled,
+        "configured": auth_enabled,
+        "public_base_url": _public_base_url(request),
+        "redirect_uri": f"{_public_base_url(request)}/auth/google/callback",
+        "missing": missing,
+        "https_only_cookie": os.getenv("SESSION_HTTPS_ONLY", "1") == "1",
+    }
 
 
 def _current_user(request: Request) -> dict[str, Any] | None:
@@ -124,18 +162,17 @@ def _job_catalog_context() -> dict[str, Any]:
 
 def _common_context(request: Request, active_nav: str) -> dict[str, Any]:
     user = _current_user(request)
-    base_url = str(request.base_url).rstrip("/")
-    auth_enabled = _auth_enabled()
+    auth_status = _auth_status(request)
+    auth_enabled = bool(auth_status["enabled"])
     return {
         "user": user,
         "active_nav": active_nav,
         "auth_enabled": auth_enabled,
-        "auth_redirect_uri": f"{base_url}/auth/google/callback",
-        "auth_requirements": [
-            "GOOGLE_CLIENT_ID",
-            "GOOGLE_CLIENT_SECRET",
-            "SESSION_SECRET",
-        ] if not auth_enabled else [],
+        "auth_status": auth_status,
+        "auth_redirect_uri": str(auth_status["redirect_uri"]),
+        "auth_requirements": list(auth_status["missing"]),
+        "auth_error": str(request.session.pop("auth_error", "")),
+        "auth_next": str(request.url.path or "/review"),
     }
 
 
@@ -374,24 +411,45 @@ def healthz() -> JSONResponse:
     return JSONResponse({"status": "ok"})
 
 
+@app.get("/auth/status", response_class=JSONResponse)
+def auth_status(request: Request) -> JSONResponse:
+    return JSONResponse(_auth_status(request))
+
+
 @app.get("/auth/login/google")
 async def auth_login_google(request: Request) -> RedirectResponse:
     if not _auth_enabled():
         raise HTTPException(status_code=503, detail="Google login is not configured.")
-    redirect_uri = request.url_for("auth_google_callback")
-    return await oauth.google.authorize_redirect(request, redirect_uri)
+    next_path = str(request.query_params.get("next") or "/review")
+    if not next_path.startswith("/"):
+        next_path = "/review"
+    request.session["auth_next"] = next_path
+    redirect_uri = f"{_public_base_url(request)}/auth/google/callback"
+    return await oauth.google.authorize_redirect(
+        request,
+        redirect_uri,
+        prompt="select_account",
+    )
 
 
 @app.get("/auth/google/callback")
 async def auth_google_callback(request: Request) -> RedirectResponse:
     if not _auth_enabled():
         raise HTTPException(status_code=503, detail="Google login is not configured.")
-    token = await oauth.google.authorize_access_token(request)
-    userinfo = token.get("userinfo")
-    if not userinfo:
-        userinfo = await oauth.google.parse_id_token(request, token)
-    if not userinfo:
-        raise HTTPException(status_code=401, detail="Google login failed.")
+    next_path = str(request.session.pop("auth_next", "/review"))
+    if not next_path.startswith("/"):
+        next_path = "/review"
+
+    try:
+        token = await oauth.google.authorize_access_token(request)
+        userinfo = token.get("userinfo")
+        if not userinfo:
+            userinfo = await oauth.google.parse_id_token(request, token)
+        if not userinfo:
+            raise HTTPException(status_code=401, detail="Google login failed.")
+    except Exception:
+        request.session["auth_error"] = "Google sign-in did not complete. Try again or check the OAuth client setup."
+        return RedirectResponse(url=next_path, status_code=303)
 
     user = upsert_user(
         google_sub=str(userinfo["sub"]),
@@ -400,7 +458,7 @@ async def auth_google_callback(request: Request) -> RedirectResponse:
         picture=str(userinfo.get("picture") or ""),
     )
     _login_user(request, user)
-    return RedirectResponse(url="/review", status_code=303)
+    return RedirectResponse(url=next_path, status_code=303)
 
 
 @app.get("/auth/logout")

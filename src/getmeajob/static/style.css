@@ -41,6 +41,32 @@ body {
   padding: 24px 18px 48px;
 }
 
+.auth-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 14px 18px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: #fffdf8;
+}
+
+.auth-banner strong,
+.auth-banner span {
+  display: block;
+}
+
+.auth-banner span {
+  color: var(--muted);
+}
+
+.auth-banner-error {
+  border-color: #efc5be;
+  background: var(--danger-soft);
+}
+
 .eyebrow {
   margin: 0 0 8px;
   color: var(--muted);
@@ -1156,6 +1182,11 @@ label {
   font-family: Consolas, "Courier New", monospace;
   font-size: 0.88rem;
   word-break: break-word;
+}
+
+.auth-ready-card {
+  border-color: #bfd6d9;
+  background: #f0f7f8;
 }
 
 .history-chart-shell {

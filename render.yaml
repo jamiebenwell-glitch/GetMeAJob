@@ -5,3 +5,8 @@ services:
     plan: starter
     autoDeploy: true
     healthCheckPath: /healthz
+    envVars:
+      - key: SESSION_HTTPS_ONLY
+        value: "1"
+      - key: PUBLIC_BASE_URL
+        value: https://getmeajob-yvur.onrender.com

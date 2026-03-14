@@ -153,7 +153,12 @@
       {% elif auth_enabled %}
       <p class="sidebar-note">Sign in with Google to save drafts, compare revisions, and see your score trend over time.</p>
       <div class="account-actions">
-        <a class="primary auth-button" href="/auth/login/google">Continue with Google</a>
+        <a class="primary auth-button" href="/auth/login/google?next=/review">Continue with Google</a>
+      </div>
+      <div class="auth-setup-card auth-ready-card">
+        <strong>Google OAuth ready</strong>
+        <span>Redirect URI</span>
+        <code>{{ auth_redirect_uri }}</code>
       </div>
       {% else %}
       <p class="sidebar-note">Google sign-in is ready in the app, but credentials are not configured on this environment yet.</p>

@@ -41,6 +41,10 @@ function page() {
   return document.body?.dataset.page || "";
 }
 
+function authStatus() {
+  return parseJsonNode("page-auth-status", {});
+}
+
 function describeList(items) {
   if (!Array.isArray(items) || items.length === 0) {
     return "none";
@@ -64,6 +68,13 @@ function setupJobsPage() {
   const jobsCount = document.getElementById("jobs-count");
   const jobsEmpty = document.getElementById("jobs-empty");
   const activeFilters = document.getElementById("active-filters");
+  const authButtons = Array.from(document.querySelectorAll('.auth-button[href^="/auth/login/google"]'));
+
+  authButtons.forEach((button) => {
+    if (button instanceof HTMLAnchorElement) {
+      button.href = `/auth/login/google?next=${encodeURIComponent(window.location.pathname)}`;
+    }
+  });
 
   const stored = readState();
   if (jobSearch && typeof stored.jobSearch === "string") {
@@ -228,6 +239,7 @@ function setupReviewPage() {
   const revisionViewer = document.getElementById("revision-viewer");
   const addButtons = Array.from(document.querySelectorAll("#add-set, #add-set-bottom"));
   const hasFeedback = reviewForm.dataset.hasFeedback === "true";
+  const currentAuthStatus = authStatus();
 
   function readSetValue(container, selector) {
     const field = container.querySelector(selector);
@@ -644,7 +656,7 @@ function setupReviewPage() {
         body: JSON.stringify({ kind, title, content, draft_id: draftId || null }),
       });
       if (response.status === 401) {
-        const authButton = document.querySelector('.site-auth a[href="/auth/login/google"]');
+        const authButton = document.querySelector('.site-auth a[href^="/auth/login/google"]');
         if (authButton instanceof HTMLAnchorElement) {
           persistReviewState();
           window.location.href = authButton.href;
@@ -765,7 +777,7 @@ function setupReviewPage() {
     try {
       const response = await fetch(`/api/drafts/${draftId}/revisions${suffix}`);
       if (response.status === 401) {
-        const authButton = document.querySelector('.site-auth a[href="/auth/login/google"]');
+        const authButton = document.querySelector('.site-auth a[href^="/auth/login/google"]');
         if (authButton instanceof HTMLAnchorElement) {
           window.location.href = authButton.href;
           return;
@@ -965,7 +977,10 @@ function setupReviewPage() {
 
   if (!pageUser.id) {
     document.querySelectorAll(".save-draft").forEach((button) => {
-      button.setAttribute("title", "Sign in with Google to save drafts.");
+      const title = currentAuthStatus.enabled
+        ? "Sign in with Google to save drafts."
+        : "Google login is not configured yet for this environment.";
+      button.setAttribute("title", title);
     });
   }
 }
