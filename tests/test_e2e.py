@@ -1,71 +1,11 @@
 from __future__ import annotations
 
-import contextlib
-import os
-import socket
-import subprocess
-import sys
 import tempfile
-import time
 from pathlib import Path
 
-import httpx
 from playwright.sync_api import sync_playwright
 
-
-ROOT = Path(__file__).resolve().parents[1]
-
-
-def _get_free_port() -> int:
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
-
-
-def _wait_for_server(url: str, timeout_seconds: int = 40) -> None:
-    end = time.time() + timeout_seconds
-    while time.time() < end:
-        try:
-            response = httpx.get(url, timeout=2.0)
-            if response.status_code == 200:
-                return
-        except Exception:
-            time.sleep(0.25)
-    raise RuntimeError(f"Server did not become ready at {url}")
-
-
-@contextlib.contextmanager
-def run_server():
-    port = _get_free_port()
-    with tempfile.TemporaryDirectory() as temp_dir:
-        env = os.environ.copy()
-        env["PYTHONPATH"] = "src"
-        env["TESTING"] = "1"
-        env["GETMEAJOB_DB_PATH"] = str(Path(temp_dir) / "test_app.db")
-        env["SESSION_HTTPS_ONLY"] = "0"
-
-        process = subprocess.Popen(
-            [
-                sys.executable,
-                "-m",
-                "uvicorn",
-                "getmeajob.webapp:app",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                str(port),
-            ],
-            cwd=ROOT,
-            env=env,
-        )
-
-        try:
-            base_url = f"http://127.0.0.1:{port}"
-            _wait_for_server(f"{base_url}/healthz")
-            yield base_url
-        finally:
-            process.terminate()
-            process.wait(timeout=10)
+from tests.e2e_helpers import ReviewerPage, run_server
 
 
 def test_browser_jobs_filters_and_handoff() -> None:
@@ -87,6 +27,34 @@ def test_browser_jobs_filters_and_handoff() -> None:
         browser.close()
 
 
+def test_browser_review_supports_manual_text_entry() -> None:
+    with run_server() as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1200})
+        review = ReviewerPage(page)
+        review.goto(f"{base_url}/review")
+
+        first_set = review.first_set()
+        assert first_set.get_by_label("Paste CV text").is_visible()
+        assert first_set.get_by_label("Paste cover letter text").is_visible()
+        assert first_set.get_by_label("Upload CV file").is_visible()
+        assert first_set.get_by_label("Upload cover letter file").is_visible()
+
+        review.fill_manual(
+            "Mechanical engineering placement at Acme. Need CAD, manufacturing, testing, and analysis.",
+            "Mechanical engineering student with CAD, testing, and prototype project work. Improved fixture setup by 15%.",
+            "I want to join Acme for this placement and can support CAD, testing, and manufacturing delivery.",
+        )
+        review.submit_review()
+        review.wait_for_results()
+
+        assert page.locator('[data-tab-trigger="results"]').get_attribute("aria-selected") == "true"
+        page.locator('[data-tab-trigger="reviewer"]').click()
+        assert first_set.get_by_label("Paste CV text").input_value().startswith("Mechanical engineering student")
+        assert first_set.get_by_label("Paste cover letter text").input_value().startswith("I want to join Acme")
+        browser.close()
+
+
 def test_browser_signed_in_draft_save_and_load() -> None:
     with run_server() as base_url, tempfile.TemporaryDirectory() as temp_dir, sync_playwright() as playwright:
         temp_path = Path(temp_dir)
@@ -97,15 +65,14 @@ def test_browser_signed_in_draft_save_and_load() -> None:
 
         browser = playwright.chromium.launch()
         page = browser.new_page(viewport={"width": 1440, "height": 1200})
-        page.goto(f"{base_url}/test/login?next=/review", wait_until="networkidle")
+        review = ReviewerPage(page)
+        review.sign_in_test_user(base_url)
 
-        first_set = page.locator(".set").first
-        first_set.get_by_label("Upload CV").set_input_files(str(cv_path))
-        first_set.get_by_label("Upload cover letter").set_input_files(str(cover_path))
+        review.upload_documents(str(cv_path), str(cover_path))
         page.wait_for_selector("text=Loaded from upload: cv.txt")
         page.get_by_role("button", name="Save CV draft").click()
         page.wait_for_selector("text=Saved")
-        first_set.get_by_label("CV text").fill(
+        review.first_set().get_by_label("Paste CV text").fill(
             "Mechanical engineering student with CAD, manufacturing, and test rig work.\nImproved setup time by 15%."
         )
         page.get_by_role("button", name="Save CV draft").click()
@@ -118,13 +85,13 @@ def test_browser_signed_in_draft_save_and_load() -> None:
         page.wait_for_selector("text=added")
         assert page.locator(".revision-line.added").count() >= 1
 
-        page.get_by_role("button", name="Add another").first.click()
-        second_set = page.locator(".set").nth(1)
+        review.add_application()
+        second_set = review.second_set()
         second_set.scroll_into_view_if_needed()
         page.locator('[data-draft-list="cv"] .load-draft').first.click()
-        assert second_set.get_by_label("CV text").input_value().startswith("Mechanical engineering student")
+        assert second_set.get_by_label("Paste CV text").input_value().startswith("Mechanical engineering student")
         page.locator('[data-draft-list="cover_letter"] .load-draft').first.click()
-        assert second_set.get_by_label("Cover letter text").input_value().startswith("I want to join")
+        assert second_set.get_by_label("Paste cover letter text").input_value().startswith("I want to join")
         browser.close()
 
 
@@ -144,17 +111,16 @@ def test_browser_review_results_and_history() -> None:
 
         browser = playwright.chromium.launch()
         page = browser.new_page(viewport={"width": 1440, "height": 1200})
-        page.goto(f"{base_url}/test/login?next=/review", wait_until="networkidle")
+        review = ReviewerPage(page)
+        review.sign_in_test_user(base_url)
 
-        first_set = page.locator(".set").first
-        first_set.get_by_label("Job advert text").fill(
+        review.first_set().get_by_label("Job advert text").fill(
             "Mechanical engineering placement at Acme. Need CAD, manufacturing, testing, and analysis."
         )
-        first_set.get_by_label("Upload CV").set_input_files(str(cv_path))
-        first_set.get_by_label("Upload cover letter").set_input_files(str(cover_path))
-        page.get_by_role("button", name="Review", exact=True).first.click(no_wait_after=True)
+        review.upload_documents(str(cv_path), str(cover_path))
+        review.submit_review()
 
-        page.wait_for_selector("text=Scored applications")
+        review.wait_for_results()
         assert page.locator('[data-tab-trigger="results"]').get_attribute("aria-selected") == "true"
         page.wait_for_selector("text=Roles that fit this CV")
         page.get_by_label("Question").fill("What should I change first?")
@@ -195,4 +161,3 @@ def test_browser_split_page_layout_desktop_and_mobile() -> None:
         assert workspace_box["y"] > sidebar_box["y"]
 
         browser.close()
-

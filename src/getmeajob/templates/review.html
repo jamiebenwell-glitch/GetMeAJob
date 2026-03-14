@@ -33,19 +33,20 @@
         </div>
         <button type="button" class="ghost save-draft" data-kind="cv">Save CV draft</button>
       </div>
+      <p class="document-help">Paste CV text directly or upload a file to extract it into the editor below.</p>
       <input type="hidden" name="cv_draft_id" value="{{ application.cv_draft_id }}" />
       <label>
         Draft name
         <input type="text" name="cv_draft_title" value="{{ application.cv_draft_title }}" placeholder="Main CV" />
       </label>
       <label>
-        Upload CV
-        <input type="file" name="cv_file" accept=".txt,.pdf,.docx" data-loaded-name="{{ application.cv_file_name }}" />
-        <span class="file-hint">{% if application.cv_file_name %}Loaded draft: {{ application.cv_file_name }}{% else %}Upload .txt, .pdf, or .docx. The extracted text stays editable below.{% endif %}</span>
+        Paste CV text
+        <textarea name="cv_text" rows="12" placeholder="Upload a CV to extract the text, then edit it here.">{{ application.cv_text }}</textarea>
       </label>
       <label>
-        CV text
-        <textarea name="cv_text" rows="12" placeholder="Upload a CV to extract the text, then edit it here.">{{ application.cv_text }}</textarea>
+        Upload CV file
+        <input type="file" name="cv_file" accept=".txt,.pdf,.docx" data-loaded-name="{{ application.cv_file_name }}" />
+        <span class="file-hint">{% if application.cv_file_name %}Loaded draft: {{ application.cv_file_name }}{% else %}Upload .txt, .pdf, or .docx. The extracted text stays editable below.{% endif %}</span>
       </label>
     </article>
 
@@ -57,19 +58,20 @@
         </div>
         <button type="button" class="ghost save-draft" data-kind="cover_letter">Save cover draft</button>
       </div>
+      <p class="document-help">Paste the cover letter directly or upload a file to extract it into the editor below.</p>
       <input type="hidden" name="cover_draft_id" value="{{ application.cover_draft_id }}" />
       <label>
         Draft name
         <input type="text" name="cover_draft_title" value="{{ application.cover_draft_title }}" placeholder="Main Cover Letter" />
       </label>
       <label>
-        Upload cover letter
-        <input type="file" name="cover_letter_file" accept=".txt,.pdf,.docx" data-loaded-name="{{ application.cover_letter_file_name }}" />
-        <span class="file-hint">{% if application.cover_letter_file_name %}Loaded draft: {{ application.cover_letter_file_name }}{% else %}Upload .txt, .pdf, or .docx. The extracted text stays editable below.{% endif %}</span>
+        Paste cover letter text
+        <textarea name="cover_text" rows="12" placeholder="Upload a cover letter to extract the text, then edit it here.">{{ application.cover_text }}</textarea>
       </label>
       <label>
-        Cover letter text
-        <textarea name="cover_text" rows="12" placeholder="Upload a cover letter to extract the text, then edit it here.">{{ application.cover_text }}</textarea>
+        Upload cover letter file
+        <input type="file" name="cover_letter_file" accept=".txt,.pdf,.docx" data-loaded-name="{{ application.cover_letter_file_name }}" />
+        <span class="file-hint">{% if application.cover_letter_file_name %}Loaded draft: {{ application.cover_letter_file_name }}{% else %}Upload .txt, .pdf, or .docx. The extracted text stays editable below.{% endif %}</span>
       </label>
     </article>
   </div>
@@ -523,19 +525,20 @@
           </div>
           <button type="button" class="ghost save-draft" data-kind="cv">Save CV draft</button>
         </div>
+        <p class="document-help">Paste CV text directly or upload a file to extract it into the editor below.</p>
         <input type="hidden" name="cv_draft_id" value="" />
         <label>
           Draft name
           <input type="text" name="cv_draft_title" value="Main CV" placeholder="Main CV" />
         </label>
         <label>
-          Upload CV
-          <input type="file" name="cv_file" accept=".txt,.pdf,.docx" data-loaded-name="" />
-          <span class="file-hint">Upload .txt, .pdf, or .docx. The extracted text stays editable below.</span>
+          Paste CV text
+          <textarea name="cv_text" rows="12" placeholder="Upload a CV to extract the text, then edit it here."></textarea>
         </label>
         <label>
-          CV text
-          <textarea name="cv_text" rows="12" placeholder="Upload a CV to extract the text, then edit it here."></textarea>
+          Upload CV file
+          <input type="file" name="cv_file" accept=".txt,.pdf,.docx" data-loaded-name="" />
+          <span class="file-hint">Upload .txt, .pdf, or .docx. The extracted text stays editable below.</span>
         </label>
       </article>
 
@@ -547,19 +550,20 @@
           </div>
           <button type="button" class="ghost save-draft" data-kind="cover_letter">Save cover draft</button>
         </div>
+        <p class="document-help">Paste the cover letter directly or upload a file to extract it into the editor below.</p>
         <input type="hidden" name="cover_draft_id" value="" />
         <label>
           Draft name
           <input type="text" name="cover_draft_title" value="Main Cover Letter" placeholder="Main Cover Letter" />
         </label>
         <label>
-          Upload cover letter
-          <input type="file" name="cover_letter_file" accept=".txt,.pdf,.docx" data-loaded-name="" />
-          <span class="file-hint">Upload .txt, .pdf, or .docx. The extracted text stays editable below.</span>
+          Paste cover letter text
+          <textarea name="cover_text" rows="12" placeholder="Upload a cover letter to extract the text, then edit it here."></textarea>
         </label>
         <label>
-          Cover letter text
-          <textarea name="cover_text" rows="12" placeholder="Upload a cover letter to extract the text, then edit it here."></textarea>
+          Upload cover letter file
+          <input type="file" name="cover_letter_file" accept=".txt,.pdf,.docx" data-loaded-name="" />
+          <span class="file-hint">Upload .txt, .pdf, or .docx. The extracted text stays editable below.</span>
         </label>
       </article>
     </div>

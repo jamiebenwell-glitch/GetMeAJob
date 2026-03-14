@@ -50,6 +50,10 @@ def test_review_page_renders_guest_workspace(client: TestClient) -> None:
     assert response.status_code == 200
     assert "CV review workspace" in response.text
     assert "Save CV draft" in response.text
+    assert "Paste CV text" in response.text
+    assert "Upload CV file" in response.text
+    assert "Paste cover letter text" in response.text
+    assert "Upload cover letter file" in response.text
     assert "Google sign-in is ready in the app" in response.text
     assert "/auth/google/callback" in response.text
     assert "Score trend" in response.text
