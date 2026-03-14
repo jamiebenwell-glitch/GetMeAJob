@@ -1,0 +1,526 @@
+{% extends "base.html" %}
+
+{% macro application_set(application) -%}
+<section class="set{% if loop is defined and loop.first %} active{% endif %}" data-index="{{ application.index }}">
+  <div class="set-header">
+    <div>
+      <p class="eyebrow">Application {{ application.index }}</p>
+      <h3>Role and documents</h3>
+    </div>
+    <div class="set-controls">
+      <button type="button" class="ghost reset-set">Reset</button>
+      <button type="button" class="ghost remove-set">Remove</button>
+    </div>
+  </div>
+
+  <div class="set-grid set-grid-job">
+    <label>
+      Job advert URL
+      <input type="url" name="job_url" placeholder="https://company.com/jobs/role" value="{{ application.job_url }}" />
+    </label>
+    <label class="set-grid-span">
+      Job advert text
+      <textarea name="job" rows="8" placeholder="Paste the job description here">{{ application.job }}</textarea>
+    </label>
+  </div>
+
+  <div class="document-grid">
+    <article class="document-card" data-kind="cv">
+      <div class="document-card-head">
+        <div>
+          <p class="eyebrow">CV Draft</p>
+          <h4>CV</h4>
+        </div>
+        <button type="button" class="ghost save-draft" data-kind="cv">Save CV draft</button>
+      </div>
+      <input type="hidden" name="cv_draft_id" value="{{ application.cv_draft_id }}" />
+      <label>
+        Draft name
+        <input type="text" name="cv_draft_title" value="{{ application.cv_draft_title }}" placeholder="Main CV" />
+      </label>
+      <label>
+        Upload CV
+        <input type="file" name="cv_file" accept=".txt,.pdf,.docx" data-loaded-name="{{ application.cv_file_name }}" />
+        <span class="file-hint">{% if application.cv_file_name %}Loaded draft: {{ application.cv_file_name }}{% else %}Upload .txt, .pdf, or .docx. The extracted text stays editable below.{% endif %}</span>
+      </label>
+      <label>
+        CV text
+        <textarea name="cv_text" rows="12" placeholder="Upload a CV to extract the text, then edit it here.">{{ application.cv_text }}</textarea>
+      </label>
+    </article>
+
+    <article class="document-card" data-kind="cover_letter">
+      <div class="document-card-head">
+        <div>
+          <p class="eyebrow">Cover Letter Draft</p>
+          <h4>Cover letter</h4>
+        </div>
+        <button type="button" class="ghost save-draft" data-kind="cover_letter">Save cover draft</button>
+      </div>
+      <input type="hidden" name="cover_draft_id" value="{{ application.cover_draft_id }}" />
+      <label>
+        Draft name
+        <input type="text" name="cover_draft_title" value="{{ application.cover_draft_title }}" placeholder="Main Cover Letter" />
+      </label>
+      <label>
+        Upload cover letter
+        <input type="file" name="cover_letter_file" accept=".txt,.pdf,.docx" data-loaded-name="{{ application.cover_letter_file_name }}" />
+        <span class="file-hint">{% if application.cover_letter_file_name %}Loaded draft: {{ application.cover_letter_file_name }}{% else %}Upload .txt, .pdf, or .docx. The extracted text stays editable below.{% endif %}</span>
+      </label>
+      <label>
+        Cover letter text
+        <textarea name="cover_text" rows="12" placeholder="Upload a cover letter to extract the text, then edit it here.">{{ application.cover_text }}</textarea>
+      </label>
+    </article>
+  </div>
+
+  {% if application.errors %}
+  <section class="inline-errors">
+    <h4>Needs input</h4>
+    <ul>
+      {% for error in application.errors %}
+      <li>{{ error }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+</section>
+{%- endmacro %}
+
+{% block content %}
+<header class="hero review-hero">
+  <div class="hero-copy">
+    <p class="eyebrow">Review Workspace</p>
+    <h1>Keep your drafts, track your score, and improve in one place.</h1>
+    <p class="lead">
+      Upload once, edit the extracted text, save named drafts, and compare your review scores over time.
+    </p>
+    <div class="hero-steps">
+      <span>1. Pick a job</span>
+      <span>2. Save document drafts</span>
+      <span>3. Review and compare</span>
+    </div>
+  </div>
+  <aside class="hero-panel review-hero-panel">
+    <div class="hero-stat">
+      <span>CV drafts</span>
+      <strong>{{ drafts.cv | length }}</strong>
+    </div>
+    <div class="hero-stat">
+      <span>Cover drafts</span>
+      <strong>{{ drafts.cover_letter | length }}</strong>
+    </div>
+    <div class="hero-stat">
+      <span>Review runs</span>
+      <strong>{{ review_history | length }}</strong>
+    </div>
+    <div class="hero-stat">
+      <span>Account</span>
+      <strong>{% if user %}Live{% else %}Guest{% endif %}</strong>
+    </div>
+  </aside>
+</header>
+
+<section class="overview-band review-overview">
+  <article class="overview-card">
+    <p class="overview-label">Saved drafts</p>
+    <p class="overview-text">Keep a reusable base CV and cover letter, then adjust them role by role without re-uploading each time.</p>
+  </article>
+  <article class="overview-card">
+    <p class="overview-label">Improvement history</p>
+    <p class="overview-text">Each signed-in review stores the score, date, and linked draft names so progress is visible over time.</p>
+  </article>
+  <article class="overview-card">
+    <p class="overview-label">Role targeting</p>
+    <p class="overview-text">Jobs from the board and role suggestions can be loaded straight into the active reviewer set.</p>
+  </article>
+</section>
+
+<div class="review-layout">
+  <aside class="review-sidebar">
+    <section class="panel sidebar-panel">
+      <div class="panel-head compact-head">
+        <div>
+          <p class="eyebrow">Account</p>
+          <h2>Saved work</h2>
+        </div>
+      </div>
+      {% if user %}
+      <p class="sidebar-note">Signed in as <strong>{{ user.name }}</strong>. Your saved drafts and review history are available below.</p>
+      {% else %}
+      <p class="sidebar-note">Sign in with Google to save drafts and keep a history of score improvements.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel sidebar-panel drafts-panel">
+      <div class="panel-head compact-head">
+        <div>
+          <p class="eyebrow">Library</p>
+          <h3>CV drafts</h3>
+        </div>
+      </div>
+      <div class="saved-drafts" data-draft-list="cv">
+        {% if drafts.cv %}
+          {% for draft in drafts.cv %}
+          <article class="saved-draft" data-kind="cv" data-draft-id="{{ draft.id }}" data-draft-title="{{ draft.title }}" data-draft-content="{{ draft.content | e }}">
+            <div>
+              <strong>{{ draft.title }}</strong>
+              <span>Updated {{ draft.updated_at }}</span>
+            </div>
+            <button type="button" class="secondary load-draft" data-kind="cv" data-draft-id="{{ draft.id }}">Use draft</button>
+          </article>
+          {% endfor %}
+        {% else %}
+          <p class="sidebar-empty">No CV drafts saved yet.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="panel sidebar-panel drafts-panel">
+      <div class="panel-head compact-head">
+        <div>
+          <p class="eyebrow">Library</p>
+          <h3>Cover drafts</h3>
+        </div>
+      </div>
+      <div class="saved-drafts" data-draft-list="cover_letter">
+        {% if drafts.cover_letter %}
+          {% for draft in drafts.cover_letter %}
+          <article class="saved-draft" data-kind="cover_letter" data-draft-id="{{ draft.id }}" data-draft-title="{{ draft.title }}" data-draft-content="{{ draft.content | e }}">
+            <div>
+              <strong>{{ draft.title }}</strong>
+              <span>Updated {{ draft.updated_at }}</span>
+            </div>
+            <button type="button" class="secondary load-draft" data-kind="cover_letter" data-draft-id="{{ draft.id }}">Use draft</button>
+          </article>
+          {% endfor %}
+        {% else %}
+          <p class="sidebar-empty">No cover letter drafts saved yet.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="panel sidebar-panel history-panel">
+      <div class="panel-head compact-head">
+        <div>
+          <p class="eyebrow">History</p>
+          <h3>Score trend</h3>
+        </div>
+      </div>
+      <div class="history-list">
+        {% if review_history %}
+          {% for item in review_history %}
+          <article class="history-item">
+            <div class="history-score {% if item.score_delta is not none and item.score_delta >= 0 %}up{% elif item.score_delta is not none %}down{% endif %}">{{ item.score_total }}%</div>
+            <div>
+              <strong>{{ item.job_title }}</strong>
+              <span>{{ item.created_at }}</span>
+              <p>{{ item.cv_title }} / {{ item.cover_title }}</p>
+            </div>
+          </article>
+          {% endfor %}
+        {% else %}
+          <p class="sidebar-empty">No saved review history yet.</p>
+        {% endif %}
+      </div>
+    </section>
+  </aside>
+
+  <section class="panel workspace-panel" id="workspace-panel" data-initial-tab="{{ initial_workspace_tab }}">
+    <div class="workspace-panel-head">
+      <div>
+        <p class="eyebrow">Review Studio</p>
+        <h2>CV review workspace</h2>
+        <p class="workspace-note">Jobs stay on the jobs page. This page is focused on drafting, scoring, and comparing results.</p>
+      </div>
+      <div class="workspace-tabs" role="tablist" aria-label="Review workspace tabs">
+        <button type="button" class="workspace-tab" data-tab-trigger="reviewer" aria-selected="false">Reviewer</button>
+        <button type="button" class="workspace-tab" data-tab-trigger="results" aria-selected="false" {% if not has_scored_results %}disabled{% endif %}>Results</button>
+      </div>
+    </div>
+
+    <div class="workspace-view" id="workspace-reviewer" data-tab-panel="reviewer">
+      {% if has_feedback %}
+      <section class="feedback-banner">
+        <div>
+          <strong>Review complete.</strong>
+          <span>{% if has_scored_results %}Results are ready in the `Results` tab.{% else %}Some applications still need more input before they can be scored.{% endif %}</span>
+        </div>
+        {% if has_scored_results %}
+        <button type="button" class="secondary" data-open-tab="results">Open results</button>
+        {% endif %}
+      </section>
+      {% endif %}
+
+      <form id="review-form" class="review-form" method="post" action="/review" enctype="multipart/form-data" data-has-feedback="{{ 'true' if has_feedback else 'false' }}">
+        <div class="actions actions-top">
+          <button type="button" class="ghost" id="add-set">Add another</button>
+          <button type="submit" class="primary">Review</button>
+        </div>
+        <div class="application-stack" id="sets">
+          {% for application in applications %}
+          {{ application_set(application) }}
+          {% endfor %}
+        </div>
+        <div class="actions">
+          <button type="button" class="ghost" id="add-set-bottom">Add another</button>
+          <button type="submit" class="primary">Review</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="workspace-view results-view" id="workspace-results" data-tab-panel="results" hidden>
+      {% if has_scored_results %}
+      <section class="results-shell">
+        <div class="results-head">
+          <div>
+            <p class="eyebrow">Results</p>
+            <h3>Scored applications</h3>
+          </div>
+          <div class="result-switcher" role="tablist" aria-label="Reviewed applications">
+            {% for application in scored_applications %}
+            <button type="button" class="result-switch" data-result-target="{{ application.index }}">Application {{ application.index }}</button>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="result-grid">
+          {% for application in scored_applications %}
+          <article class="result-card{% if not loop.first %} hidden{% endif %}" data-application="{{ application.index }}">
+            <div class="result-topline">
+              <div>
+                <p class="result-label">Overall score</p>
+                <h4 class="result-title">{{ application.cv_draft_title }} against {{ application.job.split('\n')[0] if application.job else application.job_url or 'Selected role' }}</h4>
+              </div>
+              <div class="score">{{ application.score.total }}%</div>
+            </div>
+
+            <section class="score-grid">
+              <article class="metric-card"><span>Relevance</span><strong>{{ application.score.relevance }}%</strong></article>
+              <article class="metric-card"><span>Tailoring</span><strong>{{ application.score.tailoring }}%</strong></article>
+              <article class="metric-card"><span>Specificity</span><strong>{{ application.score.specificity }}%</strong></article>
+              <article class="metric-card"><span>Structure</span><strong>{{ application.score.structure }}%</strong></article>
+              <article class="metric-card"><span>Clarity</span><strong>{{ application.score.clarity }}%</strong></article>
+            </section>
+
+            <div class="results-columns">
+              <div>
+                <section class="notes-panel">
+                  <h4>Next improvements</h4>
+                  <ul>
+                    {% for note in application.notes %}
+                    <li>{{ note }}</li>
+                    {% endfor %}
+                  </ul>
+                </section>
+
+                <section class="compact-keywords">
+                  <article class="notes-panel">
+                    <h4>Matched keywords</h4>
+                    <p>{{ application.keyword_overlap | join(', ') if application.keyword_overlap else 'No strong matched keywords yet.' }}</p>
+                  </article>
+                  <article class="notes-panel">
+                    <h4>Missing keywords</h4>
+                    <p>{{ application.missing_keywords | join(', ') if application.missing_keywords else 'No major missing keywords.' }}</p>
+                  </article>
+                </section>
+
+                <section class="suggestions-panel">
+                  <h4>Roles that fit this CV</h4>
+                  <div class="suggestion-list">
+                    {% for suggestion in application.role_suggestions %}
+                    <article class="suggestion-card">
+                      <div class="suggestion-head">
+                        <div>
+                          <p class="suggestion-company">{{ suggestion.company }}</p>
+                          <h5>{{ suggestion.title }}</h5>
+                        </div>
+                        <span class="suggestion-score">{{ suggestion.score }}%</span>
+                      </div>
+                      <p class="suggestion-summary">{{ suggestion.summary }}</p>
+                      <p class="suggestion-meta">{{ suggestion.location }} | {{ suggestion.duration }}</p>
+                      <p class="suggestion-keywords">Matched: {{ suggestion.matched_keywords | join(', ') }}</p>
+                      <div class="suggestion-actions">
+                        <button type="button" class="secondary use-suggestion" data-job-url="{{ suggestion.apply_url }}" data-job-description="{{ suggestion.job_description | e }}">Load into reviewer</button>
+                        <a class="suggestion-link" href="{{ suggestion.apply_url }}" target="_blank" rel="noopener noreferrer">Apply</a>
+                      </div>
+                    </article>
+                    {% else %}
+                    <article class="suggestion-card">
+                      <p class="suggestion-summary">Upload a stronger CV draft to unlock role suggestions.</p>
+                    </article>
+                    {% endfor %}
+                  </div>
+                </section>
+              </div>
+
+              <div>
+                <section class="category-section notes-panel">
+                  <h4>Requirement coverage</h4>
+                  <div class="category-grid">
+                    {% for category in application.categories %}
+                    <article class="category-card">
+                      <div class="category-head">
+                        <strong>{{ category.label }}</strong>
+                        <span>{{ category.coverage }}%</span>
+                      </div>
+                      <div class="coverage-bar"><span style="width: {{ category.coverage }}%"></span></div>
+                      <p class="category-line">Matched: {{ category.matched_keywords | join(', ') if category.matched_keywords else 'None yet' }}</p>
+                      <p class="category-line missing">Missing: {{ category.missing_keywords | join(', ') if category.missing_keywords else 'Covered' }}</p>
+                    </article>
+                    {% endfor %}
+                  </div>
+                </section>
+
+                <section class="markup-stack">
+                  <article class="markup-card">
+                    <h4>CV markup</h4>
+                    {% for segment in application.cv_segments %}
+                    <div class="annotated-segment{% if segment.highlight %} issue{% endif %}">
+                      {% if segment.highlight %}<span class="issue-badge">{{ segment.highlight.issue_id }}</span>{% endif %}
+                      <div>
+                        <div class="segment-text{% if segment.highlight %} issue-mark{% endif %}">{{ segment.text }}</div>
+                        {% if segment.highlight %}
+                        <span class="issue-reason">{{ segment.highlight.reason }}</span>
+                        <span class="issue-suggestion">{{ segment.highlight.suggestion }}</span>
+                        {% endif %}
+                      </div>
+                    </div>
+                    {% endfor %}
+                  </article>
+
+                  <article class="markup-card">
+                    <h4>Cover letter markup</h4>
+                    {% for segment in application.cover_segments %}
+                    <div class="annotated-segment{% if segment.highlight %} issue{% endif %}">
+                      {% if segment.highlight %}<span class="issue-badge">{{ segment.highlight.issue_id }}</span>{% endif %}
+                      <div>
+                        <div class="segment-text{% if segment.highlight %} issue-mark{% endif %}">{{ segment.text }}</div>
+                        {% if segment.highlight %}
+                        <span class="issue-reason">{{ segment.highlight.reason }}</span>
+                        <span class="issue-suggestion">{{ segment.highlight.suggestion }}</span>
+                        {% endif %}
+                      </div>
+                    </div>
+                    {% endfor %}
+                  </article>
+                </section>
+              </div>
+            </div>
+          </article>
+          {% endfor %}
+        </div>
+
+        <section class="chatbot-panel">
+          <div class="chatbot-header">
+            <p class="eyebrow">Review Assistant</p>
+            <h3>Ask what to change next</h3>
+          </div>
+          <div id="chatbot-messages" class="chatbot-body">
+            <div class="chat-message bot">Ask about score drivers, missing requirements, your CV, your cover letter, or which role fits best.</div>
+          </div>
+          <form id="chatbot-form" class="chatbot-form">
+            <label class="chatbot-label" for="chatbot-application">Application</label>
+            <div class="chatbot-controls">
+              <select id="chatbot-application" aria-label="Application">
+                {% for application in scored_applications %}
+                <option value="{{ application.index }}">Application {{ application.index }}</option>
+                {% endfor %}
+              </select>
+              <input id="chatbot-question" aria-label="Question" type="text" placeholder="What should I change first?" />
+              <button type="submit" class="primary">Ask</button>
+            </div>
+          </form>
+        </section>
+      </section>
+      {% else %}
+      <section class="panel-empty-state">
+        <h3>No scored reviews yet</h3>
+        <p>Upload or load a CV and cover letter, add a job advert, and run a review to populate this panel.</p>
+      </section>
+      {% endif %}
+    </div>
+  </section>
+</div>
+
+<template id="application-set-template">
+  <section class="set" data-index="__INDEX__">
+    <div class="set-header">
+      <div>
+        <p class="eyebrow">Application __INDEX__</p>
+        <h3>Role and documents</h3>
+      </div>
+      <div class="set-controls">
+        <button type="button" class="ghost reset-set">Reset</button>
+        <button type="button" class="ghost remove-set">Remove</button>
+      </div>
+    </div>
+
+    <div class="set-grid set-grid-job">
+      <label>
+        Job advert URL
+        <input type="url" name="job_url" placeholder="https://company.com/jobs/role" value="" />
+      </label>
+      <label class="set-grid-span">
+        Job advert text
+        <textarea name="job" rows="8" placeholder="Paste the job description here"></textarea>
+      </label>
+    </div>
+
+    <div class="document-grid">
+      <article class="document-card" data-kind="cv">
+        <div class="document-card-head">
+          <div>
+            <p class="eyebrow">CV Draft</p>
+            <h4>CV</h4>
+          </div>
+          <button type="button" class="ghost save-draft" data-kind="cv">Save CV draft</button>
+        </div>
+        <input type="hidden" name="cv_draft_id" value="" />
+        <label>
+          Draft name
+          <input type="text" name="cv_draft_title" value="Main CV" placeholder="Main CV" />
+        </label>
+        <label>
+          Upload CV
+          <input type="file" name="cv_file" accept=".txt,.pdf,.docx" data-loaded-name="" />
+          <span class="file-hint">Upload .txt, .pdf, or .docx. The extracted text stays editable below.</span>
+        </label>
+        <label>
+          CV text
+          <textarea name="cv_text" rows="12" placeholder="Upload a CV to extract the text, then edit it here."></textarea>
+        </label>
+      </article>
+
+      <article class="document-card" data-kind="cover_letter">
+        <div class="document-card-head">
+          <div>
+            <p class="eyebrow">Cover Letter Draft</p>
+            <h4>Cover letter</h4>
+          </div>
+          <button type="button" class="ghost save-draft" data-kind="cover_letter">Save cover draft</button>
+        </div>
+        <input type="hidden" name="cover_draft_id" value="" />
+        <label>
+          Draft name
+          <input type="text" name="cover_draft_title" value="Main Cover Letter" placeholder="Main Cover Letter" />
+        </label>
+        <label>
+          Upload cover letter
+          <input type="file" name="cover_letter_file" accept=".txt,.pdf,.docx" data-loaded-name="" />
+          <span class="file-hint">Upload .txt, .pdf, or .docx. The extracted text stays editable below.</span>
+        </label>
+        <label>
+          Cover letter text
+          <textarea name="cover_text" rows="12" placeholder="Upload a cover letter to extract the text, then edit it here."></textarea>
+        </label>
+      </article>
+    </div>
+  </section>
+</template>
+
+<script id="page-drafts" type="application/json">{{ drafts | tojson }}</script>
+<script id="page-history" type="application/json">{{ review_history | tojson }}</script>
+<script id="review-data" type="application/json">{{ scored_applications | tojson }}</script>
+{% endblock %}
+

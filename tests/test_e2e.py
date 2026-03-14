@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import os
 import socket
 import subprocess
@@ -33,379 +34,154 @@ def _wait_for_server(url: str, timeout_seconds: int = 20) -> None:
     raise RuntimeError(f"Server did not become ready at {url}")
 
 
-def test_browser_review_flow() -> None:
+@contextlib.contextmanager
+def run_server():
     port = _get_free_port()
-    env = os.environ.copy()
-    env["PYTHONPATH"] = "src"
+    with tempfile.TemporaryDirectory() as temp_dir:
+        env = os.environ.copy()
+        env["PYTHONPATH"] = "src"
+        env["TESTING"] = "1"
+        env["GETMEAJOB_DB_PATH"] = str(Path(temp_dir) / "test_app.db")
 
-    process = subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "uvicorn",
-            "getmeajob.webapp:app",
-            "--host",
-            "127.0.0.1",
-            "--port",
-            str(port),
-        ],
-        cwd=ROOT,
-        env=env,
-    )
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "uvicorn",
+                "getmeajob.webapp:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(port),
+            ],
+            cwd=ROOT,
+            env=env,
+        )
 
-    try:
-        _wait_for_server(f"http://127.0.0.1:{port}")
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            cv_path = temp_path / "cv.txt"
-            cover_path = temp_path / "cover.txt"
-            cv_path.write_text(
-                "Mechanical engineering student with CAD, manufacturing, and test rig work. Improved setup time by 15%.",
-                encoding="utf-8",
-            )
-            cover_path.write_text(
-                "I want to join Acme for this placement. I delivered testing improvements and built CAD models.",
-                encoding="utf-8",
-            )
-
-            with sync_playwright() as playwright:
-                browser = playwright.chromium.launch()
-                page = browser.new_page()
-                page.goto(f"http://127.0.0.1:{port}", wait_until="networkidle")
-
-                page.get_by_placeholder("Search title, company, location, summary").fill("zzzz-no-match")
-                page.wait_for_selector("text=No jobs match the current filters.")
-                page.get_by_placeholder("Search title, company, location, summary").fill("")
-                page.wait_for_selector("text=roles shown")
-                page.get_by_label("Source filter").select_option("greenhouse")
-                assert "shown" in page.locator("#jobs-count").text_content()
-                page.get_by_label("Source filter").select_option("")
-                page.get_by_label("Remote only").check()
-                page.wait_for_selector("text=roles shown")
-                page.get_by_label("Remote only").uncheck()
-
-                page.get_by_role("button", name="Add another").click()
-                second_job = page.locator(".set").nth(1).get_by_label("Job advert URL")
-                second_job.scroll_into_view_if_needed()
-                page.get_by_placeholder("Search title, company, location, summary").fill("engineer")
-                page.locator(".job-card:not(.hidden)").first.get_by_role("button", name="Load into reviewer").click()
-                assert second_job.input_value()
-                page.locator(".set").nth(1).get_by_label("Job description").fill(
-                    "Mechanical engineering placement. Company: Acme. Need CAD, manufacturing, testing, analysis."
-                )
-                page.locator(".set").nth(1).get_by_label("CV file").set_input_files(str(cv_path))
-                page.locator(".set").nth(1).get_by_label("Cover letter file").set_input_files(str(cover_path))
-                page.get_by_role("button", name="Review", exact=True).click(no_wait_after=True)
-
-                page.wait_for_selector("#workspace-results")
-                assert page.locator('[data-tab-trigger="results"]').get_attribute("aria-selected") == "true"
-                page.wait_for_selector("text=CV markup")
-                page.wait_for_selector("text=Matched keywords")
-                page.wait_for_selector("text=Roles that fit this CV")
-                page.wait_for_selector('[data-result-target="2"]')
-                page.get_by_label("Application", exact=True).select_option("2")
-                page.get_by_label("Question").fill("What should I change first?")
-                page.get_by_role("button", name="Ask").click()
-                page.wait_for_selector("text=Start with")
-                page.locator('[data-tab-trigger="reviewer"]').click()
-                page.locator(".set").nth(1).get_by_label("Job description").fill(
-                    "Mechanical engineering placement. Company: Acme. Need CAD, testing, analysis, production."
-                )
-                page.get_by_role("button", name="Review", exact=True).click(no_wait_after=True)
-                page.locator('[data-tab-trigger="reviewer"]').click()
-                page.wait_for_selector("text=Loaded and reusable: cv.txt")
-                assert "cad" in page.content().lower()
-                browser.close()
-    finally:
-        process.terminate()
-        process.wait(timeout=10)
+        try:
+            base_url = f"http://127.0.0.1:{port}"
+            _wait_for_server(f"{base_url}/healthz")
+            yield base_url
+        finally:
+            process.terminate()
+            process.wait(timeout=10)
 
 
-def test_browser_validation_feedback() -> None:
-    port = _get_free_port()
-    env = os.environ.copy()
-    env["PYTHONPATH"] = "src"
+def test_browser_jobs_filters_and_handoff() -> None:
+    with run_server() as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1200})
+        page.goto(f"{base_url}/jobs", wait_until="networkidle")
 
-    process = subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "uvicorn",
-            "getmeajob.webapp:app",
-            "--host",
-            "127.0.0.1",
-            "--port",
-            str(port),
-        ],
-        cwd=ROOT,
-        env=env,
-    )
+        page.get_by_placeholder("Search title, company, location, summary").fill("zzzz-no-match")
+        page.wait_for_selector("text=No jobs match the current filters.")
+        page.get_by_role("button", name="Reset filters").click()
+        page.get_by_label("Source filter").select_option("greenhouse")
+        page.wait_for_selector("text=roles shown")
+        page.locator(".job-card:not(.hidden)").first.get_by_role("button", name="Open in reviewer").click()
 
-    try:
-        _wait_for_server(f"http://127.0.0.1:{port}")
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch()
-            page = browser.new_page()
-            page.goto(f"http://127.0.0.1:{port}", wait_until="networkidle")
-            page.get_by_role("button", name="Review", exact=True).click(no_wait_after=True)
-            page.wait_for_selector("text=Needs input")
-            page.wait_for_selector("text=Upload a CV file in .txt, .pdf, or .docx format.")
-            page.wait_for_selector("text=Upload a cover letter file in .txt, .pdf, or .docx format.")
-            browser.close()
-    finally:
-        process.terminate()
-        process.wait(timeout=10)
+        page.wait_for_url(f"{base_url}/review")
+        assert page.locator('textarea[name="job"]').first.input_value().strip() != ""
+        assert page.locator('input[name="job_url"]').first.input_value().startswith("https://")
+        browser.close()
 
 
-def test_browser_layout_smoke_desktop_and_mobile() -> None:
-    port = _get_free_port()
-    env = os.environ.copy()
-    env["PYTHONPATH"] = "src"
+def test_browser_signed_in_draft_save_and_load() -> None:
+    with run_server() as base_url, tempfile.TemporaryDirectory() as temp_dir, sync_playwright() as playwright:
+        temp_path = Path(temp_dir)
+        cv_path = temp_path / "cv.txt"
+        cover_path = temp_path / "cover.txt"
+        cv_path.write_text("Mechanical engineering student with CAD, manufacturing, and test rig work.", encoding="utf-8")
+        cover_path.write_text("I want to join an engineering team and contribute to testing and manufacturing.", encoding="utf-8")
 
-    process = subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "uvicorn",
-            "getmeajob.webapp:app",
-            "--host",
-            "127.0.0.1",
-            "--port",
-            str(port),
-        ],
-        cwd=ROOT,
-        env=env,
-    )
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1200})
+        page.goto(f"{base_url}/test/login?next=/review", wait_until="networkidle")
 
-    try:
-        _wait_for_server(f"http://127.0.0.1:{port}")
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch()
+        first_set = page.locator(".set").first
+        first_set.get_by_label("Upload CV").set_input_files(str(cv_path))
+        first_set.get_by_label("Upload cover letter").set_input_files(str(cover_path))
+        page.wait_for_selector("text=Loaded from upload: cv.txt")
+        page.get_by_role("button", name="Save CV draft").click()
+        page.wait_for_selector("text=Saved")
+        page.get_by_role("button", name="Save cover draft").click()
+        page.wait_for_selector("text=Saved")
+        page.wait_for_selector("text=Use draft")
 
-            desktop = browser.new_page(viewport={"width": 1440, "height": 1200})
-            desktop.goto(f"http://127.0.0.1:{port}", wait_until="networkidle")
-            assert desktop.locator(".workspace").is_visible()
-            assert desktop.locator(".jobs-panel").is_visible()
-            assert desktop.locator(".workspace-panel").is_visible()
-            desktop_overflow = desktop.evaluate("() => document.documentElement.scrollWidth - window.innerWidth")
-            assert desktop_overflow <= 2
-
-            mobile = browser.new_page(viewport={"width": 390, "height": 1200})
-            mobile.goto(f"http://127.0.0.1:{port}", wait_until="networkidle")
-            mobile_overflow = mobile.evaluate("() => document.documentElement.scrollWidth - window.innerWidth")
-            assert mobile_overflow <= 2
-
-            first_filter = mobile.locator(".job-filters > *").nth(0).bounding_box()
-            second_filter = mobile.locator(".job-filters > *").nth(1).bounding_box()
-            assert first_filter is not None and second_filter is not None
-            assert second_filter["y"] > first_filter["y"]
-
-            browser.close()
-    finally:
-        process.terminate()
-        process.wait(timeout=10)
+        page.get_by_role("button", name="Add another").first.click()
+        second_set = page.locator(".set").nth(1)
+        second_set.scroll_into_view_if_needed()
+        page.locator('[data-draft-list="cv"] .load-draft').first.click()
+        assert second_set.get_by_label("CV text").input_value().startswith("Mechanical engineering student")
+        page.locator('[data-draft-list="cover_letter"] .load-draft').first.click()
+        assert second_set.get_by_label("Cover letter text").input_value().startswith("I want to join")
+        browser.close()
 
 
-def test_browser_new_application_stays_reachable() -> None:
-    port = _get_free_port()
-    env = os.environ.copy()
-    env["PYTHONPATH"] = "src"
+def test_browser_review_results_and_history() -> None:
+    with run_server() as base_url, tempfile.TemporaryDirectory() as temp_dir, sync_playwright() as playwright:
+        temp_path = Path(temp_dir)
+        cv_path = temp_path / "cv.txt"
+        cover_path = temp_path / "cover.txt"
+        cv_path.write_text(
+            "Mechanical engineering student with CAD, prototype testing, and manufacturing project work. Improved setup time by 15%.",
+            encoding="utf-8",
+        )
+        cover_path.write_text(
+            "I want to join Acme for this placement and can support CAD, testing, and manufacturing delivery.",
+            encoding="utf-8",
+        )
 
-    process = subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "uvicorn",
-            "getmeajob.webapp:app",
-            "--host",
-            "127.0.0.1",
-            "--port",
-            str(port),
-        ],
-        cwd=ROOT,
-        env=env,
-    )
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1200})
+        page.goto(f"{base_url}/test/login?next=/review", wait_until="networkidle")
 
-    try:
-        _wait_for_server(f"http://127.0.0.1:{port}")
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch()
-            page = browser.new_page(viewport={"width": 1440, "height": 1200})
-            page.goto(f"http://127.0.0.1:{port}", wait_until="networkidle")
+        first_set = page.locator(".set").first
+        first_set.get_by_label("Job advert text").fill(
+            "Mechanical engineering placement at Acme. Need CAD, manufacturing, testing, and analysis."
+        )
+        first_set.get_by_label("Upload CV").set_input_files(str(cv_path))
+        first_set.get_by_label("Upload cover letter").set_input_files(str(cover_path))
+        page.get_by_role("button", name="Review", exact=True).first.click(no_wait_after=True)
 
-            page.get_by_role("button", name="Add another").click()
-            second_set = page.locator(".set").nth(1)
-            second_job_url = second_set.get_by_label("Job advert URL")
-            second_job_url.scroll_into_view_if_needed()
-            assert second_job_url.is_visible()
-            assert page.locator(".set.active").nth(0).locator("h2, h3").text_content() == "Application 2"
-
-            browser.close()
-    finally:
-        process.terminate()
-        process.wait(timeout=10)
+        page.wait_for_selector("text=Scored applications")
+        assert page.locator('[data-tab-trigger="results"]').get_attribute("aria-selected") == "true"
+        page.wait_for_selector("text=Roles that fit this CV")
+        page.get_by_label("Question").fill("What should I change first?")
+        page.get_by_role("button", name="Ask").click()
+        page.wait_for_selector("text=Start with")
+        page.locator('[data-tab-trigger="reviewer"]').click()
+        page.wait_for_selector("text=Score trend")
+        assert page.locator(".history-item").count() >= 1
+        browser.close()
 
 
-def test_browser_results_stay_in_workspace() -> None:
-    port = _get_free_port()
-    env = os.environ.copy()
-    env["PYTHONPATH"] = "src"
+def test_browser_split_page_layout_desktop_and_mobile() -> None:
+    with run_server() as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
 
-    process = subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "uvicorn",
-            "getmeajob.webapp:app",
-            "--host",
-            "127.0.0.1",
-            "--port",
-            str(port),
-        ],
-        cwd=ROOT,
-        env=env,
-    )
+        desktop_jobs = browser.new_page(viewport={"width": 1440, "height": 1200})
+        desktop_jobs.goto(f"{base_url}/jobs", wait_until="networkidle")
+        assert desktop_jobs.locator(".jobs-page-panel").is_visible()
+        assert not desktop_jobs.locator(".review-sidebar").count()
+        desktop_jobs_overflow = desktop_jobs.evaluate("() => document.documentElement.scrollWidth - window.innerWidth")
+        assert desktop_jobs_overflow <= 2
 
-    try:
-        _wait_for_server(f"http://127.0.0.1:{port}")
+        desktop_review = browser.new_page(viewport={"width": 1440, "height": 1200})
+        desktop_review.goto(f"{base_url}/review", wait_until="networkidle")
+        assert desktop_review.locator(".review-sidebar").is_visible()
+        assert desktop_review.locator(".workspace-panel").is_visible()
+        desktop_review_overflow = desktop_review.evaluate("() => document.documentElement.scrollWidth - window.innerWidth")
+        assert desktop_review_overflow <= 2
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            cv_path = temp_path / "cv.txt"
-            cover_path = temp_path / "cover.txt"
-            cv_path.write_text("Mechanical engineering student with CAD, testing, and manufacturing project work.", encoding="utf-8")
-            cover_path.write_text("I want to join Acme and can contribute to testing and manufacturing support.", encoding="utf-8")
+        mobile_review = browser.new_page(viewport={"width": 390, "height": 1200})
+        mobile_review.goto(f"{base_url}/review", wait_until="networkidle")
+        mobile_overflow = mobile_review.evaluate("() => document.documentElement.scrollWidth - window.innerWidth")
+        assert mobile_overflow <= 2
+        sidebar_box = mobile_review.locator(".review-sidebar").bounding_box()
+        workspace_box = mobile_review.locator(".workspace-panel").bounding_box()
+        assert sidebar_box is not None and workspace_box is not None
+        assert workspace_box["y"] > sidebar_box["y"]
 
-            with sync_playwright() as playwright:
-                browser = playwright.chromium.launch()
-                page = browser.new_page(viewport={"width": 1440, "height": 1200})
-                page.goto(f"http://127.0.0.1:{port}", wait_until="networkidle")
+        browser.close()
 
-                page.locator(".set").nth(0).get_by_label("Job description").fill(
-                    "Mechanical engineering placement. Company: Acme. Need CAD, testing, manufacturing, analysis."
-                )
-                page.locator(".set").nth(0).get_by_label("CV file").set_input_files(str(cv_path))
-                page.locator(".set").nth(0).get_by_label("Cover letter file").set_input_files(str(cover_path))
-                page.get_by_role("button", name="Review", exact=True).click(no_wait_after=True)
-
-                page.wait_for_selector("text=Review studio")
-                assert page.locator('[data-tab-trigger="results"]').get_attribute("aria-selected") == "true"
-                assert page.locator("#workspace-results").is_visible()
-                workspace_box = page.locator(".workspace-panel").bounding_box()
-                results_box = page.locator("#workspace-results").bounding_box()
-                assert workspace_box is not None and results_box is not None
-                assert results_box["y"] < workspace_box["y"] + workspace_box["height"]
-                page.wait_for_selector("text=Roles that fit this CV")
-
-                browser.close()
-    finally:
-        process.terminate()
-        process.wait(timeout=10)
-
-
-def test_browser_persists_filters_and_drafts_after_refresh() -> None:
-    port = _get_free_port()
-    env = os.environ.copy()
-    env["PYTHONPATH"] = "src"
-
-    process = subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "uvicorn",
-            "getmeajob.webapp:app",
-            "--host",
-            "127.0.0.1",
-            "--port",
-            str(port),
-        ],
-        cwd=ROOT,
-        env=env,
-    )
-
-    try:
-        _wait_for_server(f"http://127.0.0.1:{port}")
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch()
-            page = browser.new_page()
-            page.goto(f"http://127.0.0.1:{port}", wait_until="networkidle")
-
-            page.get_by_placeholder("Search title, company, location, summary").fill("engineer")
-            page.get_by_label("Remote only").check()
-            page.locator(".set").nth(0).get_by_label("Job advert URL").fill("https://example.com/test-role")
-            page.locator(".set").nth(0).get_by_label("Job description").fill("Saved draft job description")
-            page.reload(wait_until="networkidle")
-
-            assert page.get_by_placeholder("Search title, company, location, summary").input_value() == "engineer"
-            assert page.get_by_label("Remote only").is_checked()
-            assert page.locator(".set").nth(0).get_by_label("Job advert URL").input_value() == "https://example.com/test-role"
-            assert page.locator(".set").nth(0).get_by_label("Job description").input_value() == "Saved draft job description"
-            page.get_by_role("button", name="Reset filters").click()
-            assert page.get_by_placeholder("Search title, company, location, summary").input_value() == ""
-            assert not page.get_by_label("Remote only").is_checked()
-
-            browser.close()
-    finally:
-        process.terminate()
-        process.wait(timeout=10)
-
-
-def test_browser_role_suggestion_loads_into_reviewer() -> None:
-    port = _get_free_port()
-    env = os.environ.copy()
-    env["PYTHONPATH"] = "src"
-
-    process = subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "uvicorn",
-            "getmeajob.webapp:app",
-            "--host",
-            "127.0.0.1",
-            "--port",
-            str(port),
-        ],
-        cwd=ROOT,
-        env=env,
-    )
-
-    try:
-        _wait_for_server(f"http://127.0.0.1:{port}")
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            cv_path = temp_path / "cv.txt"
-            cover_path = temp_path / "cover.txt"
-            cv_path.write_text(
-                "Software and engineering student with backend, cloud, and test automation experience.",
-                encoding="utf-8",
-            )
-            cover_path.write_text(
-                "I can contribute to engineering teams with testing, automation, and backend delivery.",
-                encoding="utf-8",
-            )
-
-            with sync_playwright() as playwright:
-                browser = playwright.chromium.launch()
-                page = browser.new_page(viewport={"width": 1440, "height": 1200})
-                page.goto(f"http://127.0.0.1:{port}", wait_until="networkidle")
-
-                page.locator(".set").nth(0).get_by_label("Job description").fill(
-                    "Engineering role with backend, automation, testing, and cloud requirements."
-                )
-                page.locator(".set").nth(0).get_by_label("CV file").set_input_files(str(cv_path))
-                page.locator(".set").nth(0).get_by_label("Cover letter file").set_input_files(str(cover_path))
-                page.get_by_role("button", name="Review", exact=True).click(no_wait_after=True)
-
-                page.wait_for_selector("#workspace-results")
-                page.get_by_role("button", name="Load into reviewer").last.click()
-                page.locator('[data-tab-trigger="reviewer"]').click()
-                assert page.locator(".set").nth(0).get_by_label("Job advert URL").input_value().startswith("https://")
-                assert len(page.locator(".set").nth(0).get_by_label("Job description").input_value()) > 30
-
-                browser.close()
-    finally:
-        process.terminate()
-        process.wait(timeout=10)
