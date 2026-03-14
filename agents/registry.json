@@ -1,0 +1,56 @@
+{
+  "agents": [
+    {
+      "id": "source_compliance",
+      "purpose": "Find and approve acceptable official job sources.",
+      "inputs": ["user target market", "existing source list", "source terms or feed docs"],
+      "outputs": ["approved source inventory", "blocked source inventory", "source notes"],
+      "success_criteria": [
+        "Every source has a clear official host or ATS feed",
+        "Blocked sources are documented before ingestion work starts"
+      ]
+    },
+    {
+      "id": "ats_ingestion",
+      "purpose": "Fetch raw jobs from approved ATS boards and company feeds.",
+      "inputs": ["approved source inventory"],
+      "outputs": ["provider fetchers", "raw job payloads", "fetch smoke tests"],
+      "success_criteria": [
+        "Fetcher handles timeouts without killing the full run",
+        "Raw payloads include apply URLs and source metadata"
+      ]
+    },
+    {
+      "id": "normalization_quality",
+      "purpose": "Normalize jobs into one schema and reject bad extractions.",
+      "inputs": ["raw job payloads"],
+      "outputs": ["normalized jobs", "parser tests", "quality checks"],
+      "success_criteria": [
+        "Summaries are readable plain text",
+        "Requirements are not junk tokens",
+        "Salary and duration fields are normalized where present"
+      ]
+    },
+    {
+      "id": "reviewer_assistant",
+      "purpose": "Score CVs, mark weak excerpts, and answer user questions from review data.",
+      "inputs": ["job text", "cv text", "cover letter text"],
+      "outputs": ["scoring logic", "markup logic", "assistant responses", "review tests"],
+      "success_criteria": [
+        "Review output points to concrete weak areas",
+        "Assistant answers are grounded in current review data"
+      ]
+    },
+    {
+      "id": "frontend_qa",
+      "purpose": "Own the UI, end-to-end flows, and release gate.",
+      "inputs": ["normalized jobs", "review output", "web app code"],
+      "outputs": ["UI updates", "Playwright tests", "release verification"],
+      "success_criteria": [
+        "Core browser flows pass end-to-end",
+        "App is readable on desktop and mobile",
+        "Release build is restarted on tested code"
+      ]
+    }
+  ]
+}

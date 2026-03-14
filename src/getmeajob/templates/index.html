@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GetMeAJob</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">GetMeAJob</p>
+          <h1>Find the role. Review the application. Move faster.</h1>
+          <p class="lead">
+            Official UK engineering job feeds on the left. Your working reviewer and results studio stay on the right,
+            so you can load a role, upload once, and iterate without losing your place.
+          </p>
+          <div class="hero-steps">
+            <span>1. Filter roles</span>
+            <span>2. Load into workspace</span>
+            <span>3. Review and improve</span>
+          </div>
+        </div>
+        <aside class="hero-panel">
+          <div class="hero-stat">
+            <span>Live roles</span>
+            <strong>{{ job_count }}</strong>
+          </div>
+          <div class="hero-stat">
+            <span>Companies</span>
+            <strong>{{ company_count }}</strong>
+          </div>
+          <div class="hero-stat">
+            <span>Locations</span>
+            <strong>{{ location_count }}</strong>
+          </div>
+          <div class="hero-stat">
+            <span>Sources</span>
+            <strong>{{ provider_count }}</strong>
+          </div>
+        </aside>
+      </header>
+
+      <section class="overview-band">
+        <div class="overview-card">
+          <p class="overview-label">Jobs board</p>
+          <p class="overview-text">Search and filter official company-hosted roles, then load a posting straight into the workspace.</p>
+        </div>
+        <div class="overview-card">
+          <p class="overview-label">Sticky documents</p>
+          <p class="overview-text">Your CV and cover letter remain loaded between reviews so you can iterate quickly.</p>
+        </div>
+        <div class="overview-card">
+          <p class="overview-label">CV matching</p>
+          <p class="overview-text">Each review also suggests the strongest roles from the live jobs board based on your uploaded CV.</p>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <section class="panel jobs-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Jobs Board</p>
+              <h2>Official company-hosted UK engineering roles</h2>
+            </div>
+            <p id="jobs-count" class="jobs-count">{{ job_count }} roles shown</p>
+          </div>
+
+          <div class="job-filters">
+            <input id="job-search" type="text" placeholder="Search title, company, location, summary" />
+            <select id="job-company-filter" aria-label="Company filter">
+              <option value="">All companies</option>
+              {% for company in job_companies %}
+              <option value="{{ company }}">{{ company }}</option>
+              {% endfor %}
+            </select>
+            <select id="job-location-filter" aria-label="Location filter">
+              <option value="">All locations</option>
+              {% for location in job_locations %}
+              <option value="{{ location }}">{{ location }}</option>
+              {% endfor %}
+            </select>
+            <select id="job-duration-filter" aria-label="Duration filter">
+              <option value="">All durations</option>
+              {% for duration in job_durations %}
+              <option value="{{ duration }}">{{ duration }}</option>
+              {% endfor %}
+            </select>
+            <select id="job-provider-filter" aria-label="Source filter">
+              <option value="">All sources</option>
+              {% for provider in job_providers %}
+              <option value="{{ provider }}">{{ provider | capitalize }}</option>
+              {% endfor %}
+            </select>
+            <label class="toggle-filter">
+              <input id="job-remote-filter" type="checkbox" />
+              <span>Remote only</span>
+            </label>
+          </div>
+
+          <div class="jobs-grid" id="jobs-grid">
+            {% for job in jobs %}
+            <article
+              class="job-card"
+              data-company="{{ job.company }}"
+              data-location="{{ job.location or '' }}"
+              data-duration="{{ job.duration or '' }}"
+              data-provider="{{ job.source_provider or '' }}"
+              data-remote="{{ 'remote' in ((job.location or '') | lower) }}"
+              data-title="{{ job.title }}"
+              data-search="{{ (job.company ~ ' ' ~ job.title ~ ' ' ~ (job.location or '') ~ ' ' ~ job.summary ~ ' ' ~ (job.key_requirements | join(' '))) | lower }}"
+              data-job-summary="{{ job.summary }}"
+              data-job-url="{{ job.apply_url }}"
+              data-job-description="{{ (job.title ~ '\n' ~ (job.location or '') ~ '\n' ~ (job.summary or '') ~ '\nRequirements:\n- ' ~ (job.key_requirements | join('\n- '))) | e }}"
+            >
+              <div class="job-card-head">
+                <div>
+                  <p class="job-company">{{ job.company }}</p>
+                  <h3>{{ job.title }}</h3>
+                </div>
+                {% if job.salary %}
+                <span class="job-salary">{{ job.salary }}</span>
+                {% endif %}
+              </div>
+              <div class="job-meta">
+                <span>{{ job.location or "Location not listed" }}</span>
+                <span>{{ job.duration or "Duration not listed" }}</span>
+                <span>{{ job.department or "Department not listed" }}</span>
+              </div>
+              <p class="job-summary">{{ job.summary }}</p>
+              <div class="job-requirements">
+                {% for requirement in job.key_requirements[:4] %}
+                <span>{{ requirement }}</span>
+                {% endfor %}
+              </div>
+              <div class="job-actions">
+                <button type="button" class="secondary use-job">Load into reviewer</button>
+                <a class="primary apply-link" href="{{ job.apply_url }}" target="_blank" rel="noopener noreferrer">Apply</a>
+              </div>
+            </article>
+            {% endfor %}
+          </div>
+          <p id="jobs-empty" class="jobs-empty" hidden>No jobs match the current filters.</p>
+        </section>
+
+        <section class="panel workspace-panel" id="workspace-panel" data-initial-tab="{{ initial_workspace_tab }}">
+          <div class="workspace-panel-head">
+            <div>
+              <p class="eyebrow">Workspace</p>
+              <h2>Reviewer and results</h2>
+            </div>
+            <div class="workspace-tabs" role="tablist" aria-label="Workspace tabs">
+              <button type="button" class="workspace-tab" data-tab-trigger="reviewer" aria-controls="workspace-reviewer">Reviewer</button>
+              <button
+                type="button"
+                class="workspace-tab"
+                data-tab-trigger="results"
+                aria-controls="workspace-results"
+                {% if not has_scored_results %}disabled{% endif %}
+              >
+                Results
+              </button>
+            </div>
+          </div>
+
+          <section class="workspace-view" id="workspace-reviewer" data-tab-panel="reviewer">
+            <div class="panel-head reviewer-head">
+              <div>
+                <p class="eyebrow">Reviewer</p>
+                <h3>Application workspace</h3>
+              </div>
+              <p class="workspace-note">Uploads remain available between reviews.</p>
+            </div>
+
+            <form method="post" id="review-form" enctype="multipart/form-data">
+              {% if has_feedback %}
+              <div class="feedback-banner">
+                <div>
+                  <strong>Review complete.</strong>
+                  <span>Use the same uploads again or swap in new files for the next pass.</span>
+                </div>
+                {% if has_scored_results %}
+                <button type="button" class="secondary jump-results" data-open-tab="results">See results</button>
+                {% endif %}
+              </div>
+              {% endif %}
+
+              <div id="sets" class="application-stack">
+                {% for application in applications %}
+                <div class="set" data-index="{{ application.index }}">
+                  <input type="hidden" name="cv_cached_text" value="{{ application.cv_cached_text }}" />
+                  <input type="hidden" name="cover_cached_text" value="{{ application.cover_cached_text }}" />
+                  <input type="hidden" name="cv_cached_name" value="{{ application.cv_cached_name }}" />
+                  <input type="hidden" name="cover_cached_name" value="{{ application.cover_cached_name }}" />
+
+                  <div class="set-header">
+                    <h3>Application {{ application.index }}</h3>
+                    <button type="button" class="ghost remove-set" {% if loop.first and applications|length == 1 %}disabled{% endif %}>
+                      Remove
+                    </button>
+                  </div>
+
+                  <label>
+                    Job advert URL
+                    <input type="url" name="job_url" placeholder="https://company.com/jobs/role" value="{{ application.job_url }}" />
+                  </label>
+
+                  <label>
+                    Job description
+                    <textarea name="job" rows="7" placeholder="Paste the job description here">{{ application.job }}</textarea>
+                  </label>
+
+                  <div class="upload-grid">
+                    <label>
+                      CV file
+                      <input type="file" name="cv_file" accept=".txt,.pdf,.docx" />
+                      {% if application.cv_file_name %}
+                      <span class="file-hint">Loaded and reusable: {{ application.cv_file_name }}</span>
+                      {% endif %}
+                    </label>
+
+                    <label>
+                      Cover letter file
+                      <input type="file" name="cover_letter_file" accept=".txt,.pdf,.docx" />
+                      {% if application.cover_letter_file_name %}
+                      <span class="file-hint">Loaded and reusable: {{ application.cover_letter_file_name }}</span>
+                      {% endif %}
+                    </label>
+                  </div>
+
+                  {% if application.errors %}
+                  <div class="inline-errors">
+                    <h4>Needs input</h4>
+                    <ul>
+                      {% for error in application.errors %}
+                      <li>{{ error }}</li>
+                      {% endfor %}
+                    </ul>
+                  </div>
+                  {% endif %}
+                </div>
+                {% endfor %}
+              </div>
+
+              <div class="actions">
+                <button type="button" class="secondary" id="add-set">Add another</button>
+                <button type="submit" class="primary">Review</button>
+              </div>
+            </form>
+          </section>
+
+          <section
+            class="workspace-view results-view"
+            id="workspace-results"
+            data-tab-panel="results"
+            {% if not has_scored_results %}hidden{% endif %}
+          >
+            {% if has_scored_results %}
+            <div class="results-shell">
+              <div class="results-head">
+                <div>
+                  <p class="eyebrow">Results</p>
+                  <h3>Review studio</h3>
+                </div>
+                <div class="result-switcher" role="tablist" aria-label="Application results">
+                  {% for result in scored_applications %}
+                  <button type="button" class="result-switch" data-result-target="{{ result.index }}">
+                    Application {{ result.index }}
+                  </button>
+                  {% endfor %}
+                </div>
+              </div>
+
+              <aside class="chatbot-panel">
+                <div class="chatbot-header">
+                  <p class="eyebrow">Review Assistant</p>
+                  <h3>Ask what to fix next</h3>
+                </div>
+                <div class="chatbot-body" id="chatbot-messages">
+                  <div class="chat-message bot">
+                    Ask things like "What should I change first?", "Why is my score low?", or "How do I improve the cover letter?"
+                  </div>
+                </div>
+                <form id="chatbot-form" class="chatbot-form">
+                  <label class="chatbot-label" for="chatbot-question">Question</label>
+                  <div class="chatbot-controls">
+                    <select id="chatbot-application" aria-label="Application">
+                      {% for result in scored_applications %}
+                      <option value="{{ result.index }}">Application {{ result.index }}</option>
+                      {% endfor %}
+                    </select>
+                    <input id="chatbot-question" type="text" placeholder="Ask about your CV, cover letter, or score" />
+                    <button type="submit" class="primary">Ask</button>
+                  </div>
+                </form>
+              </aside>
+
+              <div class="result-grid">
+                {% for result in scored_applications %}
+                <article class="result-card" data-application="{{ result.index }}">
+                  <div class="result-topline">
+                    <div>
+                      <p class="result-label">Application {{ result.index }}</p>
+                      <h3 class="result-title">Match score</h3>
+                    </div>
+                    <div class="score">{{ result.score.total }}%</div>
+                  </div>
+
+                  <div class="score-grid summary-grid">
+                    <div class="metric-card">
+                      <span>Relevance</span>
+                      <strong>{{ result.score.relevance }}%</strong>
+                    </div>
+                    <div class="metric-card">
+                      <span>Tailoring</span>
+                      <strong>{{ result.score.tailoring }}%</strong>
+                    </div>
+                    <div class="metric-card">
+                      <span>Specificity</span>
+                      <strong>{{ result.score.specificity }}%</strong>
+                    </div>
+                    <div class="metric-card">
+                      <span>Structure</span>
+                      <strong>{{ result.score.structure }}%</strong>
+                    </div>
+                    <div class="metric-card">
+                      <span>Clarity</span>
+                      <strong>{{ result.score.clarity }}%</strong>
+                    </div>
+                  </div>
+
+                  <section class="category-section">
+                    <h4>Requirement coverage</h4>
+                    <div class="category-grid">
+                      {% for category in result.categories %}
+                      <div class="category-card">
+                        <div class="category-head">
+                          <strong>{{ category.label }}</strong>
+                          <span>{{ category.coverage }}%</span>
+                        </div>
+                        <div class="coverage-bar">
+                          <span style="width: {{ category.coverage }}%"></span>
+                        </div>
+                        <p class="category-line"><b>Matched:</b> {{ category.matched_keywords | join(", ") or "None yet" }}</p>
+                        <p class="category-line missing"><b>Missing:</b> {{ category.missing_keywords | join(", ") or "None" }}</p>
+                      </div>
+                      {% endfor %}
+                    </div>
+                  </section>
+
+                  <div class="results-columns">
+                    <section class="notes-panel">
+                      <h4>What to improve next</h4>
+                      {% if result.notes %}
+                      <ul>
+                        {% for note in result.notes %}
+                        <li>{{ note }}</li>
+                        {% endfor %}
+                      </ul>
+                      {% else %}
+                      <p>Strong alignment. Keep polishing wording and evidence.</p>
+                      {% endif %}
+
+                      <div class="keywords compact-keywords">
+                        <div>
+                          <h4>Matched keywords</h4>
+                          <p>{{ result.keyword_overlap | join(", ") }}</p>
+                        </div>
+                        <div>
+                          <h4>Missing keywords</h4>
+                          <p>{{ result.missing_keywords | join(", ") }}</p>
+                        </div>
+                      </div>
+
+                      <div class="suggestions-panel">
+                        <h4>Roles that fit this CV</h4>
+                        {% if result.role_suggestions %}
+                        <div class="suggestion-list">
+                          {% for suggestion in result.role_suggestions %}
+                          <article class="suggestion-card">
+                            <div class="suggestion-head">
+                              <div>
+                                <p class="suggestion-company">{{ suggestion.company }}</p>
+                                <h5>{{ suggestion.title }}</h5>
+                              </div>
+                              <span class="suggestion-score">{{ suggestion.score }}%</span>
+                            </div>
+                            <p class="suggestion-meta">{{ suggestion.location }}</p>
+                            <p class="suggestion-summary">{{ suggestion.summary }}</p>
+                            <p class="suggestion-keywords"><b>CV match:</b> {{ suggestion.matched_keywords | join(", ") }}</p>
+                            <a class="secondary suggestion-link" href="{{ suggestion.apply_url }}" target="_blank" rel="noopener noreferrer">Open role</a>
+                          </article>
+                          {% endfor %}
+                        </div>
+                        {% else %}
+                        <p>No role suggestions yet.</p>
+                        {% endif %}
+                      </div>
+                    </section>
+
+                    <section class="markup-stack">
+                      <section class="markup-card">
+                        <h4>CV markup</h4>
+                        {% for segment in result.cv_segments %}
+                        <div class="annotated-segment {% if segment.highlight %}issue{% endif %}">
+                          {% if segment.highlight %}
+                          <span class="issue-badge">{{ segment.highlight.issue_id }}</span>
+                          <div>
+                            <p class="segment-text"><mark class="issue-mark">{{ segment.text }}</mark></p>
+                            <small class="issue-reason">{{ segment.highlight.reason }}</small>
+                            <small class="issue-suggestion">{{ segment.highlight.suggestion }}</small>
+                          </div>
+                          {% else %}
+                          <p class="segment-text">{{ segment.text }}</p>
+                          {% endif %}
+                        </div>
+                        {% endfor %}
+                      </section>
+
+                      <section class="markup-card">
+                        <h4>Cover letter markup</h4>
+                        {% for segment in result.cover_segments %}
+                        <div class="annotated-segment {% if segment.highlight %}issue{% endif %}">
+                          {% if segment.highlight %}
+                          <span class="issue-badge">{{ segment.highlight.issue_id }}</span>
+                          <div>
+                            <p class="segment-text"><mark class="issue-mark">{{ segment.text }}</mark></p>
+                            <small class="issue-reason">{{ segment.highlight.reason }}</small>
+                            <small class="issue-suggestion">{{ segment.highlight.suggestion }}</small>
+                          </div>
+                          {% else %}
+                          <p class="segment-text">{{ segment.text }}</p>
+                          {% endif %}
+                        </div>
+                        {% endfor %}
+                      </section>
+                    </section>
+                  </div>
+                </article>
+                {% endfor %}
+              </div>
+            </div>
+            <script id="review-data" type="application/json">{{ scored_applications | tojson }}</script>
+            {% endif %}
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

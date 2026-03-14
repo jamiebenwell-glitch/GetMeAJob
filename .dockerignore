@@ -1,0 +1,9 @@
+.git
+.pytest_cache
+__pycache__
+tests
+agents
+scripts
+*.pyc
+*.pyo
+*.pyd

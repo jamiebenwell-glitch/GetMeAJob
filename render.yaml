@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: getmeajob
+    env: docker
+    plan: starter
+    autoDeploy: true
+    healthCheckPath: /healthz
