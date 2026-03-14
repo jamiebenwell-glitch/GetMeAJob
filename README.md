@@ -92,6 +92,8 @@ The web app supports:
 ## Hosted Deployment
 Render is the recommended host for this app.
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/jamiebenwell-glitch/GetMeAJob)
+
 - `Dockerfile` builds a production image.
 - `render.yaml` provides a Render service definition with a health check.
 - The app reads `HOST` and `PORT` from the environment for hosted runtimes.
