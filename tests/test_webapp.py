@@ -48,7 +48,8 @@ def test_review_page_renders_guest_workspace(client: TestClient) -> None:
     assert response.status_code == 200
     assert "CV review workspace" in response.text
     assert "Save CV draft" in response.text
-    assert "Sign in with Google to save drafts" in response.text
+    assert "Google sign-in is ready in the app" in response.text
+    assert "/auth/google/callback" in response.text
     assert "Score trend" in response.text
 
 
@@ -82,6 +83,38 @@ def test_signed_in_user_can_save_drafts(client: TestClient) -> None:
     assert page.status_code == 200
     assert "Main CV" in page.text
     assert "Use draft" in page.text
+    assert "Compare changes" in page.text
+
+
+def test_signed_in_user_can_fetch_revision_diff(client: TestClient) -> None:
+    client.get("/test/login", follow_redirects=False)
+
+    first = client.post(
+        "/api/drafts/save",
+        json={
+            "kind": "cv",
+            "title": "Main CV",
+            "content": "Mechanical engineering student\nCAD project work",
+        },
+    ).json()
+
+    client.post(
+        "/api/drafts/save",
+        json={
+            "kind": "cv",
+            "title": "Main CV",
+            "content": "Mechanical engineering student\nCAD project work\nImproved setup time by 15%",
+            "draft_id": first["id"],
+        },
+    )
+
+    response = client.get(f"/api/drafts/{first['id']}/revisions")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["draft"]["title"] == "Main CV"
+    assert len(payload["revisions"]) == 2
+    assert payload["summary"]["added"] >= 1
+    assert any(block["kind"] == "added" for block in payload["diff_blocks"])
 
 
 def test_review_submission_saves_history_for_signed_in_user(client: TestClient) -> None:
@@ -108,6 +141,7 @@ def test_review_submission_saves_history_for_signed_in_user(client: TestClient) 
     assert "Main CV against" in response.text
     assert "Score trend" in response.text
     assert "Main Cover Letter" in response.text
+    assert 'id="history-chart"' in response.text
 
     review_page = client.get("/review")
     assert review_page.status_code == 200

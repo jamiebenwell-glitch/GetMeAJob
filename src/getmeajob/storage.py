@@ -190,14 +190,28 @@ def list_revisions(user_id: int, draft_id: int) -> list[dict[str, Any]]:
             return []
         rows = connection.execute(
             """
-            SELECT id, draft_id, created_at
+            SELECT id, draft_id, content, created_at
             FROM document_revisions
             WHERE draft_id = ?
-            ORDER BY created_at DESC, id DESC
+            ORDER BY created_at ASC, id ASC
             """,
             (draft_id,),
         ).fetchall()
     return [dict(item) for item in rows]
+
+
+def get_revision(user_id: int, draft_id: int, revision_id: int) -> dict[str, Any] | None:
+    with _connection() as connection:
+        row = connection.execute(
+            """
+            SELECT revision.id, revision.draft_id, revision.content, revision.created_at
+            FROM document_revisions AS revision
+            JOIN document_drafts AS draft ON draft.id = revision.draft_id
+            WHERE draft.user_id = ? AND draft.id = ? AND revision.id = ?
+            """,
+            (user_id, draft_id, revision_id),
+        ).fetchone()
+    return _row_to_dict(row)
 
 
 def create_review_run(

@@ -1132,6 +1132,161 @@ label {
   margin-bottom: 4px;
 }
 
+.saved-draft-actions,
+.account-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.auth-setup-card {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fffdf7;
+}
+
+.auth-setup-card code {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f4ecdf;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.88rem;
+  word-break: break-word;
+}
+
+.history-chart-shell {
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fffdf7;
+}
+
+.history-chart-svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.history-axis {
+  stroke: #ddcfbb;
+  stroke-width: 1;
+}
+
+.history-line {
+  fill: none;
+  stroke: var(--teal);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.history-point {
+  fill: var(--accent);
+}
+
+.history-point-label {
+  fill: var(--accent-deep);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.history-chart-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.revision-viewer {
+  display: grid;
+  gap: 12px;
+}
+
+.revision-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.revision-head strong,
+.revision-head span {
+  display: block;
+}
+
+.revision-head span,
+.revision-compare-note {
+  color: var(--muted);
+}
+
+.revision-select-label {
+  display: grid;
+  gap: 6px;
+}
+
+.revision-summary {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.revision-chip {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #f1e7d5;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.revision-chip.added {
+  background: #e8f4ea;
+  color: var(--success);
+}
+
+.revision-chip.removed {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.revision-chip.same {
+  color: var(--muted);
+}
+
+.revision-lines {
+  display: grid;
+  gap: 6px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.revision-line {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fffdf7;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.revision-line.added {
+  border-color: #b9dbc0;
+  background: #eef8f0;
+}
+
+.revision-line.removed {
+  border-color: #efc5be;
+  background: #fff4f2;
+}
+
 .history-item {
   grid-template-columns: auto minmax(0, 1fr);
 }
@@ -1303,6 +1458,11 @@ input[type="file"],
   .saved-draft,
   .history-item {
     grid-template-columns: 1fr;
+  }
+
+  .revision-head {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+import difflib
 import json
 import os
 
@@ -17,11 +18,14 @@ from getmeajob.ingest import extract_job_text_from_url, extract_text_from_bytes
 from getmeajob.reviewer import recommend_roles, review
 from getmeajob.storage import (
     create_review_run,
+    get_draft,
+    get_revision,
     get_user,
     group_drafts,
     init_db,
     latest_draft_by_kind,
     list_drafts,
+    list_revisions,
     list_review_history,
     save_draft,
     upsert_user,
@@ -120,10 +124,18 @@ def _job_catalog_context() -> dict[str, Any]:
 
 def _common_context(request: Request, active_nav: str) -> dict[str, Any]:
     user = _current_user(request)
+    base_url = str(request.base_url).rstrip("/")
+    auth_enabled = _auth_enabled()
     return {
         "user": user,
         "active_nav": active_nav,
-        "auth_enabled": _auth_enabled(),
+        "auth_enabled": auth_enabled,
+        "auth_redirect_uri": f"{base_url}/auth/google/callback",
+        "auth_requirements": [
+            "GOOGLE_CLIENT_ID",
+            "GOOGLE_CLIENT_SECRET",
+            "SESSION_SECRET",
+        ] if not auth_enabled else [],
     }
 
 
@@ -206,6 +218,104 @@ def _job_title(job_text: str, job_url: str) -> str:
     return first_line or job_url or "Untitled role"
 
 
+def _history_chart_points(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ordered = list(reversed(history))
+    return [
+        {
+            "label": item["created_at"],
+            "score": int(item["score_total"]),
+            "job_title": item["job_title"],
+        }
+        for item in ordered
+    ]
+
+
+def _line_diff(previous: str, current: str) -> list[dict[str, str]]:
+    previous_lines = previous.splitlines() or [previous]
+    current_lines = current.splitlines() or [current]
+    matcher = difflib.SequenceMatcher(a=previous_lines, b=current_lines)
+    blocks: list[dict[str, str]] = []
+
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            for line in current_lines[j1:j2]:
+                if line.strip():
+                    blocks.append({"kind": "same", "text": line})
+        elif tag == "insert":
+            for line in current_lines[j1:j2]:
+                if line.strip():
+                    blocks.append({"kind": "added", "text": line})
+        elif tag == "delete":
+            for line in previous_lines[i1:i2]:
+                if line.strip():
+                    blocks.append({"kind": "removed", "text": line})
+        elif tag == "replace":
+            for line in previous_lines[i1:i2]:
+                if line.strip():
+                    blocks.append({"kind": "removed", "text": line})
+            for line in current_lines[j1:j2]:
+                if line.strip():
+                    blocks.append({"kind": "added", "text": line})
+
+    return blocks[:80]
+
+
+def _revision_payload(user_id: int, draft_id: int, revision_id: int | None = None) -> dict[str, Any]:
+    draft = get_draft(user_id, draft_id)
+    if draft is None:
+        raise HTTPException(status_code=404, detail="Draft not found.")
+
+    revisions = list_revisions(user_id, draft_id)
+    if not revisions:
+        raise HTTPException(status_code=404, detail="No revisions found.")
+
+    selected = revisions[-1]
+    if revision_id is not None:
+        selected = next((item for item in revisions if int(item["id"]) == revision_id), None) or selected
+
+    selected_index = revisions.index(selected)
+    previous = revisions[selected_index - 1] if selected_index > 0 else None
+    previous_content = str(previous["content"]) if previous else ""
+    selected_content = str(selected["content"])
+    diff_blocks = _line_diff(previous_content, selected_content)
+
+    summary = {
+        "added": sum(1 for block in diff_blocks if block["kind"] == "added"),
+        "removed": sum(1 for block in diff_blocks if block["kind"] == "removed"),
+        "unchanged": sum(1 for block in diff_blocks if block["kind"] == "same"),
+    }
+
+    return {
+        "draft": {
+            "id": draft["id"],
+            "kind": draft["kind"],
+            "title": draft["title"],
+        },
+        "revisions": [
+            {
+                "id": item["id"],
+                "created_at": item["created_at"],
+                "preview": str(item["content"]).strip()[:140],
+            }
+            for item in reversed(revisions)
+        ],
+        "selected_revision": {
+            "id": selected["id"],
+            "created_at": selected["created_at"],
+        },
+        "previous_revision": (
+            {
+                "id": previous["id"],
+                "created_at": previous["created_at"],
+            }
+            if previous
+            else None
+        ),
+        "summary": summary,
+        "diff_blocks": diff_blocks,
+    }
+
+
 def _review_page_context(
     request: Request,
     applications: list[dict[str, Any]],
@@ -228,6 +338,7 @@ def _review_page_context(
         "initial_workspace_tab": "results" if scored_applications else "reviewer",
         "drafts": drafts_grouped,
         "review_history": history,
+        "history_chart_points": _history_chart_points(history),
     }
     return context
 
@@ -338,6 +449,15 @@ async def save_draft_endpoint(request: Request) -> JSONResponse:
         draft_id=int(draft_id) if draft_id else None,
     )
     return JSONResponse(saved)
+
+
+@app.get("/api/drafts/{draft_id}/revisions", response_class=JSONResponse)
+def draft_revisions_endpoint(request: Request, draft_id: int, revision_id: int | None = None) -> JSONResponse:
+    user = _current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Sign in required.")
+    payload = _revision_payload(int(user["id"]), draft_id, revision_id)
+    return JSONResponse(payload)
 
 
 @app.post("/review", response_class=HTMLResponse)

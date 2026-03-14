@@ -147,8 +147,23 @@
       </div>
       {% if user %}
       <p class="sidebar-note">Signed in as <strong>{{ user.name }}</strong>. Your saved drafts and review history are available below.</p>
+      <div class="account-actions">
+        <a class="ghost auth-button" href="/auth/logout">Sign out</a>
+      </div>
+      {% elif auth_enabled %}
+      <p class="sidebar-note">Sign in with Google to save drafts, compare revisions, and see your score trend over time.</p>
+      <div class="account-actions">
+        <a class="primary auth-button" href="/auth/login/google">Continue with Google</a>
+      </div>
       {% else %}
-      <p class="sidebar-note">Sign in with Google to save drafts and keep a history of score improvements.</p>
+      <p class="sidebar-note">Google sign-in is ready in the app, but credentials are not configured on this environment yet.</p>
+      <div class="auth-setup-card">
+        <strong>Enable Google auth</strong>
+        <span>Add these environment variables:</span>
+        <code>{{ auth_requirements | join(", ") }}</code>
+        <span>Redirect URI:</span>
+        <code>{{ auth_redirect_uri }}</code>
+      </div>
       {% endif %}
     </section>
 
@@ -167,7 +182,10 @@
               <strong>{{ draft.title }}</strong>
               <span>Updated {{ draft.updated_at }}</span>
             </div>
-            <button type="button" class="secondary load-draft" data-kind="cv" data-draft-id="{{ draft.id }}">Use draft</button>
+            <div class="saved-draft-actions">
+              <button type="button" class="ghost view-revisions" data-kind="cv" data-draft-id="{{ draft.id }}">History</button>
+              <button type="button" class="secondary load-draft" data-kind="cv" data-draft-id="{{ draft.id }}">Use draft</button>
+            </div>
           </article>
           {% endfor %}
         {% else %}
@@ -191,7 +209,10 @@
               <strong>{{ draft.title }}</strong>
               <span>Updated {{ draft.updated_at }}</span>
             </div>
-            <button type="button" class="secondary load-draft" data-kind="cover_letter" data-draft-id="{{ draft.id }}">Use draft</button>
+            <div class="saved-draft-actions">
+              <button type="button" class="ghost view-revisions" data-kind="cover_letter" data-draft-id="{{ draft.id }}">History</button>
+              <button type="button" class="secondary load-draft" data-kind="cover_letter" data-draft-id="{{ draft.id }}">Use draft</button>
+            </div>
           </article>
           {% endfor %}
         {% else %}
@@ -207,6 +228,11 @@
           <h3>Score trend</h3>
         </div>
       </div>
+      {% if review_history %}
+      <div class="history-chart-shell">
+        <div id="history-chart" class="history-chart" aria-label="Score trend chart"></div>
+      </div>
+      {% endif %}
       <div class="history-list">
         {% if review_history %}
           {% for item in review_history %}
@@ -223,6 +249,22 @@
           <p class="sidebar-empty">No saved review history yet.</p>
         {% endif %}
       </div>
+    </section>
+
+    <section class="panel sidebar-panel revision-panel">
+      <div class="panel-head compact-head">
+        <div>
+          <p class="eyebrow">Draft Revisions</p>
+          <h3>Compare changes</h3>
+        </div>
+      </div>
+      {% if user %}
+      <div id="revision-viewer" class="revision-viewer" data-empty="Select a saved CV or cover draft and open `History` to compare revisions.">
+        <p class="sidebar-empty">Select a saved CV or cover draft and open `History` to compare revisions.</p>
+      </div>
+      {% else %}
+      <p class="sidebar-empty">Sign in to save revisions and compare how your drafts improve over time.</p>
+      {% endif %}
     </section>
   </aside>
 
@@ -521,6 +563,7 @@
 
 <script id="page-drafts" type="application/json">{{ drafts | tojson }}</script>
 <script id="page-history" type="application/json">{{ review_history | tojson }}</script>
+<script id="page-history-chart" type="application/json">{{ history_chart_points | tojson }}</script>
 <script id="review-data" type="application/json">{{ scored_applications | tojson }}</script>
 {% endblock %}
 

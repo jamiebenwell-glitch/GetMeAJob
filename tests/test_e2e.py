@@ -104,9 +104,18 @@ def test_browser_signed_in_draft_save_and_load() -> None:
         page.wait_for_selector("text=Loaded from upload: cv.txt")
         page.get_by_role("button", name="Save CV draft").click()
         page.wait_for_selector("text=Saved")
+        first_set.get_by_label("CV text").fill(
+            "Mechanical engineering student with CAD, manufacturing, and test rig work.\nImproved setup time by 15%."
+        )
+        page.get_by_role("button", name="Save CV draft").click()
+        page.wait_for_selector("text=Saved")
         page.get_by_role("button", name="Save cover draft").click()
         page.wait_for_selector("text=Saved")
         page.wait_for_selector("text=Use draft")
+        page.locator('[data-draft-list="cv"] .view-revisions').first.click()
+        page.wait_for_selector("text=CV draft history")
+        page.wait_for_selector("text=added")
+        assert page.locator(".revision-line.added").count() >= 1
 
         page.get_by_role("button", name="Add another").first.click()
         second_set = page.locator(".set").nth(1)
@@ -152,6 +161,7 @@ def test_browser_review_results_and_history() -> None:
         page.wait_for_selector("text=Start with")
         page.locator('[data-tab-trigger="reviewer"]').click()
         page.wait_for_selector("text=Score trend")
+        assert page.locator("#history-chart svg").is_visible()
         assert page.locator(".history-item").count() >= 1
         browser.close()
 

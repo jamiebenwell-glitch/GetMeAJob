@@ -140,7 +140,7 @@ function setupJobsPage() {
     }
     if (activeFilters) {
       const labels = describeActiveFilters();
-      activeFilters.textContent = labels.length > 0 ? `${labels.length} active filter${labels.length === 1 ? "" : "s"}: ${labels.join(" · ")}` : "No active filters";
+      activeFilters.textContent = labels.length > 0 ? `${labels.length} active filter${labels.length === 1 ? "" : "s"}: ${labels.join(" | ")}` : "No active filters";
     }
 
     writeState({
@@ -213,6 +213,7 @@ function setupReviewPage() {
 
   const pageUser = parseJsonNode("page-user", {});
   const reviewData = parseJsonNode("review-data", []);
+  const historyChartData = parseJsonNode("page-history-chart", []);
   const workspacePanel = document.getElementById("workspace-panel");
   const workspaceTabs = Array.from(document.querySelectorAll("[data-tab-trigger]"));
   const workspaceViews = Array.from(document.querySelectorAll("[data-tab-panel]"));
@@ -223,6 +224,8 @@ function setupReviewPage() {
   const chatbotMessages = document.getElementById("chatbot-messages");
   const chatbotApplication = document.getElementById("chatbot-application");
   const chatbotQuestion = document.getElementById("chatbot-question");
+  const historyChart = document.getElementById("history-chart");
+  const revisionViewer = document.getElementById("revision-viewer");
   const addButtons = Array.from(document.querySelectorAll("#add-set, #add-set-bottom"));
   const hasFeedback = reviewForm.dataset.hasFeedback === "true";
 
@@ -587,7 +590,10 @@ function setupReviewPage() {
           <strong></strong>
           <span></span>
         </div>
-        <button type="button" class="secondary load-draft" data-kind="${kind}" data-draft-id="${draft.id}">Use draft</button>
+        <div class="saved-draft-actions">
+          <button type="button" class="ghost view-revisions" data-kind="${kind}" data-draft-id="${draft.id}">History</button>
+          <button type="button" class="secondary load-draft" data-kind="${kind}" data-draft-id="${draft.id}">Use draft</button>
+        </div>
       `;
       list.prepend(card);
     }
@@ -638,6 +644,12 @@ function setupReviewPage() {
         body: JSON.stringify({ kind, title, content, draft_id: draftId || null }),
       });
       if (response.status === 401) {
+        const authButton = document.querySelector('.site-auth a[href="/auth/login/google"]');
+        if (authButton instanceof HTMLAnchorElement) {
+          persistReviewState();
+          window.location.href = authButton.href;
+          return;
+        }
         throw new Error("Sign in to save drafts.");
       }
       if (!response.ok) {
@@ -656,6 +668,117 @@ function setupReviewPage() {
         button.disabled = false;
         button.textContent = originalLabel;
       }, 1400);
+    }
+  }
+
+  function renderHistoryChart() {
+    if (!historyChart || !Array.isArray(historyChartData) || historyChartData.length === 0) {
+      return;
+    }
+
+    const width = 320;
+    const height = 150;
+    const padding = 18;
+    const minScore = Math.min(...historyChartData.map((item) => Number(item.score)));
+    const maxScore = Math.max(...historyChartData.map((item) => Number(item.score)));
+    const range = Math.max(maxScore - minScore, 10);
+
+    const points = historyChartData.map((item, index) => {
+      const x = padding + (index * (width - padding * 2)) / Math.max(historyChartData.length - 1, 1);
+      const y = height - padding - ((Number(item.score) - minScore) * (height - padding * 2)) / range;
+      return { ...item, x, y };
+    });
+
+    const polyline = points.map((point) => `${point.x},${point.y}`).join(" ");
+    historyChart.innerHTML = `
+      <svg viewBox="0 0 ${width} ${height}" class="history-chart-svg" role="img" aria-label="Review score trend">
+        <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" class="history-axis"></line>
+        <polyline points="${polyline}" class="history-line"></polyline>
+        ${points
+          .map(
+            (point) => `
+              <circle cx="${point.x}" cy="${point.y}" r="4" class="history-point"></circle>
+              <text x="${point.x}" y="${point.y - 10}" text-anchor="middle" class="history-point-label">${point.score}</text>
+            `
+          )
+          .join("")}
+      </svg>
+      <div class="history-chart-labels">
+        <span>${escapeHtml(points[0]?.job_title || "First review")}</span>
+        <span>${escapeHtml(points[points.length - 1]?.job_title || "Latest review")}</span>
+      </div>
+    `;
+  }
+
+  function renderRevisionViewer(payload) {
+    if (!revisionViewer) {
+      return;
+    }
+
+    const revisionOptions = (payload.revisions || [])
+      .map(
+        (revision) =>
+          `<option value="${revision.id}" ${revision.id === payload.selected_revision?.id ? "selected" : ""}>${escapeHtml(revision.created_at)}</option>`
+      )
+      .join("");
+
+    const diffBlocks = (payload.diff_blocks || [])
+      .map(
+        (block) =>
+          `<div class="revision-line ${block.kind}"><span>${escapeHtml(block.text)}</span></div>`
+      )
+      .join("");
+
+    revisionViewer.innerHTML = `
+      <div class="revision-head">
+        <div>
+          <strong>${escapeHtml(payload.draft.title)}</strong>
+          <span>${escapeHtml(payload.draft.kind === "cv" ? "CV draft history" : "Cover letter draft history")}</span>
+        </div>
+        <label class="revision-select-label">
+          <span>Revision</span>
+          <select id="revision-select" data-draft-id="${payload.draft.id}">
+            ${revisionOptions}
+          </select>
+        </label>
+      </div>
+      <div class="revision-summary">
+        <span class="revision-chip added">+${payload.summary?.added || 0} added</span>
+        <span class="revision-chip removed">-${payload.summary?.removed || 0} removed</span>
+        <span class="revision-chip same">${payload.summary?.unchanged || 0} unchanged</span>
+      </div>
+      <div class="revision-compare-note">
+        ${payload.previous_revision ? `Comparing against ${escapeHtml(payload.previous_revision.created_at)}` : "This is the first saved revision for this draft."}
+      </div>
+      <div class="revision-lines">${diffBlocks || '<div class="revision-line same"><span>No textual changes to compare yet.</span></div>'}</div>
+    `;
+  }
+
+  async function loadRevisionHistory(draftId, revisionId = "") {
+    if (!revisionViewer) {
+      return;
+    }
+
+    revisionViewer.innerHTML = `<p class="sidebar-empty">Loading revision history...</p>`;
+    const suffix = revisionId ? `?revision_id=${encodeURIComponent(revisionId)}` : "";
+
+    try {
+      const response = await fetch(`/api/drafts/${draftId}/revisions${suffix}`);
+      if (response.status === 401) {
+        const authButton = document.querySelector('.site-auth a[href="/auth/login/google"]');
+        if (authButton instanceof HTMLAnchorElement) {
+          window.location.href = authButton.href;
+          return;
+        }
+        throw new Error("Sign in required.");
+      }
+      if (!response.ok) {
+        throw new Error("Could not load revisions.");
+      }
+      const payload = await response.json();
+      renderRevisionViewer(payload);
+    } catch (error) {
+      revisionViewer.innerHTML = `<p class="sidebar-empty">${escapeHtml(error instanceof Error ? error.message : "Could not load revisions.")}</p>`;
     }
   }
 
@@ -750,6 +873,13 @@ function setupReviewPage() {
       activateWorkspaceTab("reviewer");
     }
 
+    if (target.classList.contains("view-revisions")) {
+      const draftId = target.dataset.draftId || "";
+      if (draftId) {
+        void loadRevisionHistory(draftId);
+      }
+    }
+
     if (target.classList.contains("use-suggestion")) {
       const activeSet = getActiveSet();
       if (!activeSet) {
@@ -782,6 +912,18 @@ function setupReviewPage() {
 
   chatbotApplication?.addEventListener("change", () => {
     activateResultCard(chatbotApplication.value);
+  });
+
+  document.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLSelectElement) || target.id !== "revision-select") {
+      return;
+    }
+    const draftId = target.dataset.draftId || "";
+    const revisionId = target.value || "";
+    if (draftId) {
+      void loadRevisionHistory(draftId, revisionId);
+    }
   });
 
   if (chatbotForm && chatbotQuestion) {
@@ -819,6 +961,7 @@ function setupReviewPage() {
   setActiveSet(sets.querySelector(`.set[data-index="${readState().reviewActiveIndex || 1}"]`) || sets.querySelector(".set"));
   updateButtons();
   consumePendingJob();
+  renderHistoryChart();
 
   if (!pageUser.id) {
     document.querySelectorAll(".save-draft").forEach((button) => {
