@@ -40,7 +40,9 @@ def test_root_redirects_to_jobs(client: TestClient) -> None:
 def test_jobs_page_renders_separately_from_review(client: TestClient) -> None:
     response = client.get("/jobs")
     assert response.status_code == 200
-    assert "Company-hosted UK engineering jobs" in response.text
+    assert "UK engineering roles from company-run hiring pages." in response.text
+    assert 'class="panel jobs-filter-panel"' in response.text
+    assert "jobs-results-panel" in response.text
     assert "Open in reviewer" in response.text
     assert "Saved work" not in response.text
 
@@ -48,12 +50,15 @@ def test_jobs_page_renders_separately_from_review(client: TestClient) -> None:
 def test_review_page_renders_guest_workspace(client: TestClient) -> None:
     response = client.get("/review")
     assert response.status_code == 200
+    assert "Tailor the application, then judge it like a hiring manager." in response.text
     assert "CV review workspace" in response.text
     assert "Save CV draft" in response.text
     assert "Paste CV text" in response.text
     assert "Upload CV file" in response.text
     assert "Paste cover letter text" in response.text
     assert "Upload cover letter file" in response.text
+    assert 'class="review-layout"' in response.text
+    assert 'class="panel sidebar-panel account-panel"' in response.text
     assert "Google sign-in is ready in the app" in response.text
     assert "/auth/google/callback" in response.text
     assert "Score trend" in response.text
@@ -197,6 +202,8 @@ def test_review_submission_saves_history_for_signed_in_user(client: TestClient) 
     assert 'id="history-chart"' in response.text
     assert "What to change" in response.text
     assert 'class="issue-card"' in response.text
+    assert 'class="result-overview-grid"' in response.text
+    assert 'class="results-side-column"' in response.text
 
     review_page = client.get("/review")
     assert review_page.status_code == 200

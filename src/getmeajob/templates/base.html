@@ -7,43 +7,50 @@
     <link rel="stylesheet" href="/static/style.css" />
   </head>
   <body data-page="{{ active_nav }}">
-    <header class="site-header">
-      <div class="site-header-shell">
-        <a class="site-brand" href="/jobs">
-          <span class="site-brand-mark">G</span>
-          <span>GetMeAJob</span>
-        </a>
-        <nav class="site-nav" aria-label="Primary">
-          <a href="/jobs" class="{% if active_nav == 'jobs' %}is-active{% endif %}">Jobs</a>
-          <a href="/review" class="{% if active_nav == 'review' %}is-active{% endif %}">CV Review</a>
-        </nav>
-        <div class="site-auth">
-          {% if user %}
-          <div class="user-chip">
-            <div>
-              <strong>{{ user.name }}</strong>
-              <span>{{ user.email }}</span>
-            </div>
-          </div>
-          <a class="ghost auth-button" href="/auth/logout">Sign out</a>
-          {% elif auth_enabled %}
-          <a class="primary auth-button" href="/auth/login/google?next={{ auth_next | urlencode }}">Sign in with Google</a>
-          {% else %}
-          <span class="auth-note">Google login not configured</span>
-          {% endif %}
-        </div>
-      </div>
-    </header>
+    <div class="site-frame">
+      <header class="site-header">
+        <div class="site-header-shell">
+          <a class="site-brand" href="/jobs" aria-label="GetMeAJob home">
+            <span class="site-brand-mark">G</span>
+            <span class="site-brand-copy">
+              <strong>GetMeAJob</strong>
+              <span>Engineering roles and application review</span>
+            </span>
+          </a>
 
-    <main class="page-shell">
-      {% if auth_error %}
-      <section class="auth-banner auth-banner-error">
-        <strong>Google sign-in failed</strong>
-        <span>{{ auth_error }}</span>
-      </section>
-      {% endif %}
-      {% block content %}{% endblock %}
-    </main>
+          <nav class="site-nav" aria-label="Primary">
+            <a href="/jobs" class="{% if active_nav == 'jobs' %}is-active{% endif %}">Jobs</a>
+            <a href="/review" class="{% if active_nav == 'review' %}is-active{% endif %}">CV Review</a>
+          </nav>
+
+          <div class="site-auth">
+            {% if user %}
+            <div class="user-chip">
+              <div>
+                <strong>{{ user.name }}</strong>
+                <span>{{ user.email }}</span>
+              </div>
+            </div>
+            <a class="ghost auth-button" href="/auth/logout">Sign out</a>
+            {% elif auth_enabled %}
+            <a class="primary auth-button" href="/auth/login/google?next={{ auth_next | urlencode }}">Sign in with Google</a>
+            {% else %}
+            <span class="auth-note">Google login not configured</span>
+            {% endif %}
+          </div>
+        </div>
+      </header>
+
+      <main class="page-shell">
+        {% if auth_error %}
+        <section class="auth-banner auth-banner-error">
+          <strong>Google sign-in failed</strong>
+          <span>{{ auth_error }}</span>
+        </section>
+        {% endif %}
+        {% block content %}{% endblock %}
+      </main>
+    </div>
 
     <script id="page-user" type="application/json">{{ (user or {}) | tojson }}</script>
     <script id="page-auth-status" type="application/json">{{ auth_status | tojson }}</script>

@@ -14,66 +14,72 @@
   </div>
 
   <div class="set-grid set-grid-job">
-    <label>
-      Job advert URL
-      <input type="url" name="job_url" placeholder="https://company.com/jobs/role" value="{{ application.job_url }}" />
-    </label>
-    <label class="set-grid-span">
-      Job advert text
-      <textarea name="job" rows="8" placeholder="Paste the job description here">{{ application.job }}</textarea>
-    </label>
-  </div>
-
-  <div class="document-grid">
-    <article class="document-card" data-kind="cv">
-      <div class="document-card-head">
-        <div>
-          <p class="eyebrow">CV Draft</p>
-          <h4>CV</h4>
-        </div>
-        <button type="button" class="ghost save-draft" data-kind="cv">Save CV draft</button>
+    <article class="set-panel set-panel-job">
+      <div class="mini-heading">
+        <p class="eyebrow">Job Context</p>
+        <h4>Target role</h4>
       </div>
-      <p class="document-help">Paste CV text directly or upload a file to extract it into the editor below.</p>
-      <input type="hidden" name="cv_draft_id" value="{{ application.cv_draft_id }}" />
       <label>
-        Draft name
-        <input type="text" name="cv_draft_title" value="{{ application.cv_draft_title }}" placeholder="Main CV" />
+        Job advert URL
+        <input type="url" name="job_url" placeholder="https://company.com/jobs/role" value="{{ application.job_url }}" />
       </label>
       <label>
-        Paste CV text
-        <textarea name="cv_text" rows="12" placeholder="Upload a CV to extract the text, then edit it here.">{{ application.cv_text }}</textarea>
-      </label>
-      <label>
-        Upload CV file
-        <input type="file" name="cv_file" accept=".txt,.pdf,.docx" data-loaded-name="{{ application.cv_file_name }}" />
-        <span class="file-hint">{% if application.cv_file_name %}Loaded draft: {{ application.cv_file_name }}{% else %}Upload .txt, .pdf, or .docx. The extracted text stays editable below.{% endif %}</span>
+        Job advert text
+        <textarea name="job" rows="8" placeholder="Paste the job description here">{{ application.job }}</textarea>
       </label>
     </article>
 
-    <article class="document-card" data-kind="cover_letter">
-      <div class="document-card-head">
-        <div>
-          <p class="eyebrow">Cover Letter Draft</p>
-          <h4>Cover letter</h4>
+    <div class="document-grid">
+      <article class="document-card" data-kind="cv">
+        <div class="document-card-head">
+          <div>
+            <p class="eyebrow">CV Draft</p>
+            <h4>CV</h4>
+          </div>
+          <button type="button" class="ghost save-draft" data-kind="cv">Save CV draft</button>
         </div>
-        <button type="button" class="ghost save-draft" data-kind="cover_letter">Save cover draft</button>
-      </div>
-      <p class="document-help">Paste the cover letter directly or upload a file to extract it into the editor below.</p>
-      <input type="hidden" name="cover_draft_id" value="{{ application.cover_draft_id }}" />
-      <label>
-        Draft name
-        <input type="text" name="cover_draft_title" value="{{ application.cover_draft_title }}" placeholder="Main Cover Letter" />
-      </label>
-      <label>
-        Paste cover letter text
-        <textarea name="cover_text" rows="12" placeholder="Upload a cover letter to extract the text, then edit it here.">{{ application.cover_text }}</textarea>
-      </label>
-      <label>
-        Upload cover letter file
-        <input type="file" name="cover_letter_file" accept=".txt,.pdf,.docx" data-loaded-name="{{ application.cover_letter_file_name }}" />
-        <span class="file-hint">{% if application.cover_letter_file_name %}Loaded draft: {{ application.cover_letter_file_name }}{% else %}Upload .txt, .pdf, or .docx. The extracted text stays editable below.{% endif %}</span>
-      </label>
-    </article>
+        <p class="document-help">Upload a file to extract the text, then edit it directly here before reviewing.</p>
+        <input type="hidden" name="cv_draft_id" value="{{ application.cv_draft_id }}" />
+        <label>
+          Draft name
+          <input type="text" name="cv_draft_title" value="{{ application.cv_draft_title }}" placeholder="Main CV" />
+        </label>
+        <label>
+          Paste CV text
+          <textarea name="cv_text" rows="12" placeholder="Upload a CV to extract the text, then edit it here.">{{ application.cv_text }}</textarea>
+        </label>
+        <label>
+          Upload CV file
+          <input type="file" name="cv_file" accept=".txt,.pdf,.docx" data-loaded-name="{{ application.cv_file_name }}" />
+          <span class="file-hint">{% if application.cv_file_name %}Loaded draft: {{ application.cv_file_name }}{% else %}Upload .txt, .pdf, or .docx. The extracted text stays editable below.{% endif %}</span>
+        </label>
+      </article>
+
+      <article class="document-card" data-kind="cover_letter">
+        <div class="document-card-head">
+          <div>
+            <p class="eyebrow">Cover Letter Draft</p>
+            <h4>Cover letter</h4>
+          </div>
+          <button type="button" class="ghost save-draft" data-kind="cover_letter">Save cover draft</button>
+        </div>
+        <p class="document-help">Keep one base version and tailor the wording for each role in the editor below.</p>
+        <input type="hidden" name="cover_draft_id" value="{{ application.cover_draft_id }}" />
+        <label>
+          Draft name
+          <input type="text" name="cover_draft_title" value="{{ application.cover_draft_title }}" placeholder="Main Cover Letter" />
+        </label>
+        <label>
+          Paste cover letter text
+          <textarea name="cover_text" rows="12" placeholder="Upload a cover letter to extract the text, then edit it here.">{{ application.cover_text }}</textarea>
+        </label>
+        <label>
+          Upload cover letter file
+          <input type="file" name="cover_letter_file" accept=".txt,.pdf,.docx" data-loaded-name="{{ application.cover_letter_file_name }}" />
+          <span class="file-hint">{% if application.cover_letter_file_name %}Loaded draft: {{ application.cover_letter_file_name }}{% else %}Upload .txt, .pdf, or .docx. The extracted text stays editable below.{% endif %}</span>
+        </label>
+      </article>
+    </div>
   </div>
 
   {% if application.errors %}
@@ -90,57 +96,42 @@
 {%- endmacro %}
 
 {% block content %}
-<header class="hero review-hero">
-  <div class="hero-copy">
+<section class="page-intro review-intro">
+  <div class="page-intro-copy">
     <p class="eyebrow">Review Workspace</p>
-    <h1>Keep your drafts, track your score, and improve in one place.</h1>
+    <h1>Tailor the application, then judge it like a hiring manager.</h1>
     <p class="lead">
-      Upload once, edit the extracted text, save named drafts, and compare your review scores over time.
+      Save reusable drafts, review against a specific role, and see the feedback in a structured results workspace instead of one long page.
     </p>
-    <div class="hero-steps">
-      <span>1. Pick a job</span>
-      <span>2. Save document drafts</span>
-      <span>3. Review and compare</span>
+    <div class="hero-steps intro-chips">
+      <span>Upload once, reuse often</span>
+      <span>Track revision history</span>
+      <span>Fix the red flags first</span>
     </div>
   </div>
-  <aside class="hero-panel review-hero-panel">
-    <div class="hero-stat">
+  <div class="intro-stats-grid">
+    <article class="hero-stat stat-card-accent">
       <span>CV drafts</span>
       <strong>{{ drafts.cv | length }}</strong>
-    </div>
-    <div class="hero-stat">
+    </article>
+    <article class="hero-stat">
       <span>Cover drafts</span>
       <strong>{{ drafts.cover_letter | length }}</strong>
-    </div>
-    <div class="hero-stat">
+    </article>
+    <article class="hero-stat">
       <span>Review runs</span>
       <strong>{{ review_history | length }}</strong>
-    </div>
-    <div class="hero-stat">
+    </article>
+    <article class="hero-stat">
       <span>Account</span>
       <strong>{% if user %}Live{% else %}Guest{% endif %}</strong>
-    </div>
-  </aside>
-</header>
-
-<section class="overview-band review-overview">
-  <article class="overview-card">
-    <p class="overview-label">Saved drafts</p>
-    <p class="overview-text">Keep a reusable base CV and cover letter, then adjust them role by role without re-uploading each time.</p>
-  </article>
-  <article class="overview-card">
-    <p class="overview-label">Improvement history</p>
-    <p class="overview-text">Each signed-in review stores the score, date, and linked draft names so progress is visible over time.</p>
-  </article>
-  <article class="overview-card">
-    <p class="overview-label">Role targeting</p>
-    <p class="overview-text">Jobs from the board and role suggestions can be loaded straight into the active reviewer set.</p>
-  </article>
+    </article>
+  </div>
 </section>
 
 <div class="review-layout">
   <aside class="review-sidebar">
-    <section class="panel sidebar-panel">
+    <section class="panel sidebar-panel account-panel">
       <div class="panel-head compact-head">
         <div>
           <p class="eyebrow">Account</p>
@@ -148,12 +139,12 @@
         </div>
       </div>
       {% if user %}
-      <p class="sidebar-note">Signed in as <strong>{{ user.name }}</strong>. Your saved drafts and review history are available below.</p>
+      <p class="sidebar-note">Signed in as <strong>{{ user.name }}</strong>. Drafts, score history, and revision comparisons are available below.</p>
       <div class="account-actions">
         <a class="ghost auth-button" href="/auth/logout">Sign out</a>
       </div>
       {% elif auth_enabled %}
-      <p class="sidebar-note">Sign in with Google to save drafts, compare revisions, and see your score trend over time.</p>
+      <p class="sidebar-note">Sign in with Google to save drafts, compare revisions, and keep your score history attached to your account.</p>
       <div class="account-actions">
         <a class="primary auth-button" href="/auth/login/google?next=/review">Continue with Google</a>
       </div>
@@ -280,7 +271,7 @@
       <div>
         <p class="eyebrow">Review Studio</p>
         <h2>CV review workspace</h2>
-        <p class="workspace-note">Jobs stay on the jobs page. This page is focused on drafting, scoring, and comparing results.</p>
+        <p class="workspace-note">Keep the drafting workflow in one tab and the scored analysis in the other.</p>
       </div>
       <div class="workspace-tabs" role="tablist" aria-label="Review workspace tabs">
         <button type="button" class="workspace-tab" data-tab-trigger="reviewer" aria-selected="false">Reviewer</button>
@@ -321,10 +312,11 @@
     <div class="workspace-view results-view" id="workspace-results" data-tab-panel="results" hidden>
       {% if has_scored_results %}
       <section class="results-shell">
-        <div class="results-head">
+        <div class="results-head results-head-frame">
           <div>
             <p class="eyebrow">Results</p>
             <h3>Scored applications</h3>
+            <p class="results-subtitle">Read the score first, then move through the weakest categories and red flags.</p>
           </div>
           <div class="result-switcher" role="tablist" aria-label="Reviewed applications">
             {% for application in scored_applications %}
@@ -336,34 +328,54 @@
         <div class="result-grid">
           {% for application in scored_applications %}
           <article class="result-card{% if not loop.first %} hidden{% endif %}" data-application="{{ application.index }}">
-            <div class="result-topline">
-              <div>
-                <p class="result-label">Overall score</p>
-                <h4 class="result-title">{{ application.cv_draft_title }} against {{ application.job.split('\n')[0] if application.job else application.job_url or 'Selected role' }}</h4>
-              </div>
-              <div class="score">{{ application.score.total }}%</div>
+            <div class="result-overview-grid">
+              <section class="result-hero-card">
+                <div class="result-topline">
+                  <div>
+                    <p class="result-label">Overall score</p>
+                    <h4 class="result-title">{{ application.cv_draft_title }} against {{ application.job.split('\n')[0] if application.job else application.job_url or 'Selected role' }}</h4>
+                  </div>
+                  <div class="score">{{ application.score.total }}%</div>
+                </div>
+                <section class="score-grid">
+                  <article class="metric-card"><span>Relevance</span><strong>{{ application.score.relevance }}%</strong></article>
+                  <article class="metric-card"><span>Tailoring</span><strong>{{ application.score.tailoring }}%</strong></article>
+                  <article class="metric-card"><span>Specificity</span><strong>{{ application.score.specificity }}%</strong></article>
+                  <article class="metric-card"><span>Structure</span><strong>{{ application.score.structure }}%</strong></article>
+                  <article class="metric-card"><span>Clarity</span><strong>{{ application.score.clarity }}%</strong></article>
+                </section>
+              </section>
+
+              <section class="notes-panel improvement-panel">
+                <h4>Next improvements</h4>
+                <ul>
+                  {% for note in application.notes %}
+                  <li>{{ note }}</li>
+                  {% endfor %}
+                </ul>
+              </section>
             </div>
 
-            <section class="score-grid">
-              <article class="metric-card"><span>Relevance</span><strong>{{ application.score.relevance }}%</strong></article>
-              <article class="metric-card"><span>Tailoring</span><strong>{{ application.score.tailoring }}%</strong></article>
-              <article class="metric-card"><span>Specificity</span><strong>{{ application.score.specificity }}%</strong></article>
-              <article class="metric-card"><span>Structure</span><strong>{{ application.score.structure }}%</strong></article>
-              <article class="metric-card"><span>Clarity</span><strong>{{ application.score.clarity }}%</strong></article>
-            </section>
-
             <div class="results-columns">
-              <div>
-                <section class="notes-panel">
-                  <h4>Next improvements</h4>
-                  <ul>
-                    {% for note in application.notes %}
-                    <li>{{ note }}</li>
+              <div class="results-main-column">
+                <section class="category-section notes-panel">
+                  <h4>Requirement coverage</h4>
+                  <div class="category-grid">
+                    {% for category in application.categories %}
+                    <article class="category-card">
+                      <div class="category-head">
+                        <strong>{{ category.label }}</strong>
+                        <span>{{ category.coverage }}%</span>
+                      </div>
+                      <div class="coverage-bar"><span style="width: {{ category.coverage }}%"></span></div>
+                      <p class="category-line">Matched: {{ category.matched_keywords | join(', ') if category.matched_keywords else 'None yet' }}</p>
+                      <p class="category-line missing">Missing: {{ category.missing_keywords | join(', ') if category.missing_keywords else 'Covered' }}</p>
+                    </article>
                     {% endfor %}
-                  </ul>
+                  </div>
                 </section>
 
-                <section class="compact-keywords">
+                <section class="compact-keywords compact-keywords-grid">
                   <article class="notes-panel">
                     <h4>Matched keywords</h4>
                     <p>{{ application.keyword_overlap | join(', ') if application.keyword_overlap else 'No strong matched keywords yet.' }}</p>
@@ -375,7 +387,12 @@
                 </section>
 
                 <section class="suggestions-panel">
-                  <h4>Roles that fit this CV</h4>
+                  <div class="section-heading">
+                    <div>
+                      <p class="eyebrow">Role Suggestions</p>
+                      <h4>Roles that fit this CV</h4>
+                    </div>
+                  </div>
                   <div class="suggestion-list">
                     {% for suggestion in application.role_suggestions %}
                     <article class="suggestion-card">
@@ -403,30 +420,13 @@
                 </section>
               </div>
 
-              <div>
-                <section class="category-section notes-panel">
-                  <h4>Requirement coverage</h4>
-                  <div class="category-grid">
-                    {% for category in application.categories %}
-                    <article class="category-card">
-                      <div class="category-head">
-                        <strong>{{ category.label }}</strong>
-                        <span>{{ category.coverage }}%</span>
-                      </div>
-                      <div class="coverage-bar"><span style="width: {{ category.coverage }}%"></span></div>
-                      <p class="category-line">Matched: {{ category.matched_keywords | join(', ') if category.matched_keywords else 'None yet' }}</p>
-                      <p class="category-line missing">Missing: {{ category.missing_keywords | join(', ') if category.missing_keywords else 'Covered' }}</p>
-                    </article>
-                    {% endfor %}
-                  </div>
-                </section>
-
+              <div class="results-side-column">
                 <section class="markup-stack">
                   <article class="markup-card">
                     <div class="markup-card-head">
                       <div>
                         <h4>CV markup</h4>
-                        <p class="markup-intro">Only the problem areas are shown, the way a hiring manager would flag them for revision.</p>
+                        <p class="markup-intro">These are the exact weak spots to rewrite first.</p>
                       </div>
                       <span class="markup-count">{{ application.cv_highlights | length }} flagged</span>
                     </div>
@@ -453,7 +453,7 @@
                     <div class="markup-card-head">
                       <div>
                         <h4>Cover letter markup</h4>
-                        <p class="markup-intro">Each flagged item isolates the weak passage and gives one direct correction.</p>
+                        <p class="markup-intro">Each flag isolates the weak passage and gives one direct fix.</p>
                       </div>
                       <span class="markup-count">{{ application.cover_highlights | length }} flagged</span>
                     </div>
@@ -528,66 +528,72 @@
     </div>
 
     <div class="set-grid set-grid-job">
-      <label>
-        Job advert URL
-        <input type="url" name="job_url" placeholder="https://company.com/jobs/role" value="" />
-      </label>
-      <label class="set-grid-span">
-        Job advert text
-        <textarea name="job" rows="8" placeholder="Paste the job description here"></textarea>
-      </label>
-    </div>
-
-    <div class="document-grid">
-      <article class="document-card" data-kind="cv">
-        <div class="document-card-head">
-          <div>
-            <p class="eyebrow">CV Draft</p>
-            <h4>CV</h4>
-          </div>
-          <button type="button" class="ghost save-draft" data-kind="cv">Save CV draft</button>
+      <article class="set-panel set-panel-job">
+        <div class="mini-heading">
+          <p class="eyebrow">Job Context</p>
+          <h4>Target role</h4>
         </div>
-        <p class="document-help">Paste CV text directly or upload a file to extract it into the editor below.</p>
-        <input type="hidden" name="cv_draft_id" value="" />
         <label>
-          Draft name
-          <input type="text" name="cv_draft_title" value="Main CV" placeholder="Main CV" />
+          Job advert URL
+          <input type="url" name="job_url" placeholder="https://company.com/jobs/role" value="" />
         </label>
         <label>
-          Paste CV text
-          <textarea name="cv_text" rows="12" placeholder="Upload a CV to extract the text, then edit it here."></textarea>
-        </label>
-        <label>
-          Upload CV file
-          <input type="file" name="cv_file" accept=".txt,.pdf,.docx" data-loaded-name="" />
-          <span class="file-hint">Upload .txt, .pdf, or .docx. The extracted text stays editable below.</span>
+          Job advert text
+          <textarea name="job" rows="8" placeholder="Paste the job description here"></textarea>
         </label>
       </article>
 
-      <article class="document-card" data-kind="cover_letter">
-        <div class="document-card-head">
-          <div>
-            <p class="eyebrow">Cover Letter Draft</p>
-            <h4>Cover letter</h4>
+      <div class="document-grid">
+        <article class="document-card" data-kind="cv">
+          <div class="document-card-head">
+            <div>
+              <p class="eyebrow">CV Draft</p>
+              <h4>CV</h4>
+            </div>
+            <button type="button" class="ghost save-draft" data-kind="cv">Save CV draft</button>
           </div>
-          <button type="button" class="ghost save-draft" data-kind="cover_letter">Save cover draft</button>
-        </div>
-        <p class="document-help">Paste the cover letter directly or upload a file to extract it into the editor below.</p>
-        <input type="hidden" name="cover_draft_id" value="" />
-        <label>
-          Draft name
-          <input type="text" name="cover_draft_title" value="Main Cover Letter" placeholder="Main Cover Letter" />
-        </label>
-        <label>
-          Paste cover letter text
-          <textarea name="cover_text" rows="12" placeholder="Upload a cover letter to extract the text, then edit it here."></textarea>
-        </label>
-        <label>
-          Upload cover letter file
-          <input type="file" name="cover_letter_file" accept=".txt,.pdf,.docx" data-loaded-name="" />
-          <span class="file-hint">Upload .txt, .pdf, or .docx. The extracted text stays editable below.</span>
-        </label>
-      </article>
+          <p class="document-help">Upload a file to extract the text, then edit it directly here before reviewing.</p>
+          <input type="hidden" name="cv_draft_id" value="" />
+          <label>
+            Draft name
+            <input type="text" name="cv_draft_title" value="Main CV" placeholder="Main CV" />
+          </label>
+          <label>
+            Paste CV text
+            <textarea name="cv_text" rows="12" placeholder="Upload a CV to extract the text, then edit it here."></textarea>
+          </label>
+          <label>
+            Upload CV file
+            <input type="file" name="cv_file" accept=".txt,.pdf,.docx" data-loaded-name="" />
+            <span class="file-hint">Upload .txt, .pdf, or .docx. The extracted text stays editable below.</span>
+          </label>
+        </article>
+
+        <article class="document-card" data-kind="cover_letter">
+          <div class="document-card-head">
+            <div>
+              <p class="eyebrow">Cover Letter Draft</p>
+              <h4>Cover letter</h4>
+            </div>
+            <button type="button" class="ghost save-draft" data-kind="cover_letter">Save cover draft</button>
+          </div>
+          <p class="document-help">Keep one base version and tailor the wording for each role in the editor below.</p>
+          <input type="hidden" name="cover_draft_id" value="" />
+          <label>
+            Draft name
+            <input type="text" name="cover_draft_title" value="Main Cover Letter" placeholder="Main Cover Letter" />
+          </label>
+          <label>
+            Paste cover letter text
+            <textarea name="cover_text" rows="12" placeholder="Upload a cover letter to extract the text, then edit it here."></textarea>
+          </label>
+          <label>
+            Upload cover letter file
+            <input type="file" name="cover_letter_file" accept=".txt,.pdf,.docx" data-loaded-name="" />
+            <span class="file-hint">Upload .txt, .pdf, or .docx. The extracted text stays editable below.</span>
+          </label>
+        </article>
+      </div>
     </div>
   </section>
 </template>
@@ -597,4 +603,3 @@
 <script id="page-history-chart" type="application/json">{{ history_chart_points | tojson }}</script>
 <script id="review-data" type="application/json">{{ scored_applications | tojson }}</script>
 {% endblock %}
-

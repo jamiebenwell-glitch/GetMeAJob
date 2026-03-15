@@ -14,6 +14,8 @@ def test_browser_jobs_filters_and_handoff() -> None:
         page = browser.new_page(viewport={"width": 1440, "height": 1200})
         page.goto(f"{base_url}/jobs", wait_until="networkidle")
 
+        assert page.locator(".jobs-filter-panel").is_visible()
+        assert page.locator(".jobs-results-panel").is_visible()
         page.get_by_placeholder("Search title, company, location, summary").fill("zzzz-no-match")
         page.wait_for_selector("text=No jobs match the current filters.")
         page.get_by_role("button", name="Reset filters").click()
@@ -122,6 +124,8 @@ def test_browser_review_results_and_history() -> None:
 
         review.wait_for_results()
         assert page.locator('[data-tab-trigger="results"]').get_attribute("aria-selected") == "true"
+        assert page.locator(".result-overview-grid").is_visible()
+        assert page.locator(".results-side-column .markup-card").count() >= 2
         page.wait_for_selector("text=Roles that fit this CV")
         page.wait_for_selector(".issue-card")
         assert page.locator(".issue-card").count() >= 2
@@ -151,6 +155,8 @@ def test_browser_split_page_layout_desktop_and_mobile() -> None:
 
         desktop_jobs = browser.new_page(viewport={"width": 1440, "height": 1200})
         desktop_jobs.goto(f"{base_url}/jobs", wait_until="networkidle")
+        assert desktop_jobs.locator(".page-intro.jobs-intro").is_visible()
+        assert desktop_jobs.locator(".jobs-layout").is_visible()
         assert desktop_jobs.locator(".jobs-page-panel").is_visible()
         assert not desktop_jobs.locator(".review-sidebar").count()
         desktop_jobs_overflow = desktop_jobs.evaluate("() => document.documentElement.scrollWidth - window.innerWidth")
@@ -158,6 +164,7 @@ def test_browser_split_page_layout_desktop_and_mobile() -> None:
 
         desktop_review = browser.new_page(viewport={"width": 1440, "height": 1200})
         desktop_review.goto(f"{base_url}/review", wait_until="networkidle")
+        assert desktop_review.locator(".page-intro.review-intro").is_visible()
         assert desktop_review.locator(".review-sidebar").is_visible()
         assert desktop_review.locator(".workspace-panel").is_visible()
         desktop_review_overflow = desktop_review.evaluate("() => document.documentElement.scrollWidth - window.innerWidth")
