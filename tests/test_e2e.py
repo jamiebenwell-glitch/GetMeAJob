@@ -126,6 +126,7 @@ def test_browser_review_results_and_history() -> None:
         assert page.locator('[data-tab-trigger="results"]').get_attribute("aria-selected") == "true"
         assert page.locator(".result-overview-grid").is_visible()
         assert page.locator(".results-side-column .markup-card").count() >= 2
+        assert int(page.locator(".score").first.text_content().strip().rstrip("%")) >= 60
         page.wait_for_selector("text=Roles that fit this CV")
         page.wait_for_selector(".issue-card")
         assert page.locator(".issue-card").count() >= 2
@@ -202,4 +203,22 @@ def test_browser_markup_cards_stay_readable_on_mobile() -> None:
         first_issue = page.locator(".issue-card").first.bounding_box()
         assert first_issue is not None
         assert first_issue["width"] <= 390
+        browser.close()
+
+
+def test_browser_review_keeps_senior_mismatch_score_low() -> None:
+    with run_server() as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1200})
+        review = ReviewerPage(page)
+        review.goto(f"{base_url}/review")
+        review.fill_manual(
+            "Senior Software Engineer. Build backend APIs, cloud services, and distributed systems. Requires 5+ years of software engineering experience.",
+            "Mechanical engineering undergraduate with CAD, testing, and manufacturing project experience. Completed a year in industry.",
+            "I am an undergraduate student and I want to apply because I am interested in software and engineering.",
+        )
+        review.submit_review()
+        review.wait_for_results()
+
+        assert int(page.locator(".score").first.text_content().strip().rstrip("%")) <= 35
         browser.close()

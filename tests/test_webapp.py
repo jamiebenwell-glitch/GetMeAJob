@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -208,6 +209,48 @@ def test_review_submission_saves_history_for_signed_in_user(client: TestClient) 
     review_page = client.get("/review")
     assert review_page.status_code == 200
     assert "Mechanical engineering placement at Acme" in review_page.text
+
+
+def test_review_submission_keeps_strong_fit_above_pass_threshold(client: TestClient) -> None:
+    response = client.post(
+        "/review",
+        data={
+            "job": "Mechanical Design Engineer. Must have CAD, testing, manufacturing, and analysis experience. Preferred FEA experience.",
+            "job_url": "",
+            "cv_text": "Mechanical engineering student with CAD, testing, manufacturing, and design project work. Improved prototype setup by 20%.",
+            "cover_text": "I want this design role because it matches my CAD and manufacturing project experience.",
+            "cv_draft_title": "Main CV",
+            "cover_draft_title": "Main Cover Letter",
+            "cv_draft_id": "",
+            "cover_draft_id": "",
+        },
+    )
+
+    assert response.status_code == 200
+    match = re.search(r'<div class="score">(\d+)%</div>', response.text)
+    assert match is not None
+    assert int(match.group(1)) >= 60
+
+
+def test_review_submission_keeps_senior_mismatch_low(client: TestClient) -> None:
+    response = client.post(
+        "/review",
+        data={
+            "job": "Senior Software Engineer. Build backend APIs, cloud services, and distributed systems. Requires 5+ years of software engineering experience.",
+            "job_url": "",
+            "cv_text": "Mechanical engineering undergraduate with CAD, testing, and manufacturing project experience. Completed a year in industry.",
+            "cover_text": "I am an undergraduate student and I want to apply because I am interested in software and engineering.",
+            "cv_draft_title": "Main CV",
+            "cover_draft_title": "Main Cover Letter",
+            "cv_draft_id": "",
+            "cover_draft_id": "",
+        },
+    )
+
+    assert response.status_code == 200
+    match = re.search(r'<div class="score">(\d+)%</div>', response.text)
+    assert match is not None
+    assert int(match.group(1)) <= 35
 
 
 def test_review_submission_shows_validation_feedback(client: TestClient) -> None:
