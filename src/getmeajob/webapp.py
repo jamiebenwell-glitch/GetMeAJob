@@ -358,13 +358,21 @@ def _review_page_context(
     request: Request,
     applications: list[dict[str, Any]],
     has_feedback: bool,
+    page_warnings: list[str] | None = None,
 ) -> dict[str, Any]:
     user = _current_user(request)
     drafts_grouped = {"cv": [], "cover_letter": []}
     history: list[dict[str, Any]] = []
+    warnings = list(page_warnings or [])
     if user:
-        drafts_grouped = group_drafts(list_drafts(int(user["id"])))
-        history = list_review_history(int(user["id"]))
+        try:
+            drafts_grouped = group_drafts(list_drafts(int(user["id"])))
+        except Exception:
+            warnings.append("Saved drafts could not be loaded right now.")
+        try:
+            history = list_review_history(int(user["id"]))
+        except Exception:
+            warnings.append("Review history could not be loaded right now.")
 
     scored_applications = [application for application in applications if application.get("score")]
     context = {
@@ -377,6 +385,7 @@ def _review_page_context(
         "drafts": drafts_grouped,
         "review_history": history,
         "history_chart_points": _history_chart_points(history),
+        "page_warnings": warnings,
     }
     return context
 
@@ -580,6 +589,7 @@ async def review_submit(request: Request) -> HTMLResponse:
     form = await request.form()
     user = _current_user(request)
     company_jobs = _load_company_jobs()
+    page_warnings: list[str] = []
 
     jobs = _normalize_text_list(form.getlist("job"))
     job_urls = _normalize_text_list(form.getlist("job_url"))
@@ -675,24 +685,27 @@ async def review_submit(request: Request) -> HTMLResponse:
         saved_cv: dict[str, Any] | None = None
         saved_cover: dict[str, Any] | None = None
         if user:
-            saved_cv = save_draft(
-                int(user["id"]),
-                kind="cv",
-                title=cv_draft_title,
-                content=cv_text,
-                draft_id=int(cv_draft_id) if cv_draft_id else None,
-            )
-            saved_cover = save_draft(
-                int(user["id"]),
-                kind="cover_letter",
-                title=cover_draft_title,
-                content=cover_text,
-                draft_id=int(cover_draft_id) if cover_draft_id else None,
-            )
-            application["cv_draft_id"] = saved_cv["id"]
-            application["cover_draft_id"] = saved_cover["id"]
-            application["cv_draft_title"] = saved_cv["title"]
-            application["cover_draft_title"] = saved_cover["title"]
+            try:
+                saved_cv = save_draft(
+                    int(user["id"]),
+                    kind="cv",
+                    title=cv_draft_title,
+                    content=cv_text,
+                    draft_id=int(cv_draft_id) if cv_draft_id else None,
+                )
+                saved_cover = save_draft(
+                    int(user["id"]),
+                    kind="cover_letter",
+                    title=cover_draft_title,
+                    content=cover_text,
+                    draft_id=int(cover_draft_id) if cover_draft_id else None,
+                )
+                application["cv_draft_id"] = saved_cv["id"]
+                application["cover_draft_id"] = saved_cover["id"]
+                application["cv_draft_title"] = saved_cv["title"]
+                application["cover_draft_title"] = saved_cover["title"]
+            except Exception:
+                page_warnings.append("Your review ran, but the latest draft changes could not be saved.")
 
         result = review(job_text, cv_text, cover_text)
         application["score"] = result.score.__dict__
@@ -734,17 +747,20 @@ async def review_submit(request: Request) -> HTMLResponse:
                 "categories": application["categories"],
                 "role_suggestions": application["role_suggestions"],
             }
-            create_review_run(
-                int(user["id"]),
-                job_title=_job_title(job_text, job_url),
-                job_url=job_url,
-                score=result.score.__dict__,
-                cv_draft_id=int(saved_cv["id"]) if saved_cv else None,
-                cover_draft_id=int(saved_cover["id"]) if saved_cover else None,
-                cv_title=str(saved_cv["title"]) if saved_cv else cv_draft_title,
-                cover_title=str(saved_cover["title"]) if saved_cover else cover_draft_title,
-                application_payload=saved_application,
-            )
+            try:
+                create_review_run(
+                    int(user["id"]),
+                    job_title=_job_title(job_text, job_url),
+                    job_url=job_url,
+                    score=result.score.__dict__,
+                    cv_draft_id=int(saved_cv["id"]) if saved_cv else None,
+                    cover_draft_id=int(saved_cover["id"]) if saved_cover else None,
+                    cv_title=str(saved_cv["title"]) if saved_cv else cv_draft_title,
+                    cover_title=str(saved_cover["title"]) if saved_cover else cover_draft_title,
+                    application_payload=saved_application,
+                )
+            except Exception:
+                page_warnings.append("Your review ran, but it could not be written to account history.")
 
         applications.append(application)
 
@@ -755,7 +771,7 @@ async def review_submit(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "review.html",
-        _review_page_context(request, applications, True),
+        _review_page_context(request, applications, True, page_warnings=page_warnings),
     )
 
 

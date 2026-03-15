@@ -342,6 +342,64 @@ def test_signed_in_user_can_open_legacy_saved_review_without_snapshot(client: Te
     assert "71%" in history_page.text
 
 
+def test_review_submission_still_returns_results_if_history_write_fails(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import getmeajob.webapp as webapp
+
+    client.get("/test/login", follow_redirects=False)
+
+    def fail_create_review_run(*args, **kwargs):
+        raise RuntimeError("history write failed")
+
+    monkeypatch.setattr(webapp, "create_review_run", fail_create_review_run)
+
+    response = client.post(
+        "/review",
+        data={
+            "job": "Mechanical engineering placement at Acme. Need CAD, manufacturing, testing, and analysis.",
+            "job_url": "",
+            "cv_text": "Mechanical engineering student with CAD, prototype testing, and manufacturing project work. Improved setup time by 15%.",
+            "cover_text": "I want to join Acme for this placement and can support CAD, testing, and manufacturing delivery.",
+            "cv_draft_title": "Main CV",
+            "cover_draft_title": "Main Cover Letter",
+            "cv_draft_id": "",
+            "cover_draft_id": "",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Review complete." in response.text
+    assert "Scored applications" in response.text
+    assert "Your review ran, but it could not be written to account history." in response.text
+
+
+def test_review_page_still_renders_if_draft_or_history_load_fails(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import getmeajob.webapp as webapp
+
+    client.get("/test/login", follow_redirects=False)
+
+    def fail_list_drafts(user_id: int):
+        raise RuntimeError("draft load failed")
+
+    def fail_list_review_history(user_id: int, limit: int = 20):
+        raise RuntimeError("history load failed")
+
+    monkeypatch.setattr(webapp, "list_drafts", fail_list_drafts)
+    monkeypatch.setattr(webapp, "list_review_history", fail_list_review_history)
+
+    response = client.get("/review")
+
+    assert response.status_code == 200
+    assert "CV review workspace" in response.text
+    assert "Saved drafts could not be loaded right now." in response.text
+    assert "Review history could not be loaded right now." in response.text
+
+
 def test_review_submission_keeps_strong_fit_above_pass_threshold(client: TestClient) -> None:
     response = client.post(
         "/review",

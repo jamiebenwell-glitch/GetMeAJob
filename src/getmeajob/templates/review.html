@@ -297,6 +297,14 @@
       </section>
       {% endif %}
 
+      {% if page_warnings %}
+      <section class="feedback-warning-list" aria-label="Review warnings">
+        {% for warning in page_warnings %}
+        <p>{{ warning }}</p>
+        {% endfor %}
+      </section>
+      {% endif %}
+
       <form id="review-form" class="review-form" method="post" action="/review" enctype="multipart/form-data" data-has-feedback="{{ 'true' if has_feedback else 'false' }}">
         <div class="actions actions-top">
           <button type="button" class="ghost" id="add-set">Add another</button>

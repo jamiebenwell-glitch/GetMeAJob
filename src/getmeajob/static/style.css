@@ -902,6 +902,21 @@ button,
   display: block;
 }
 
+.feedback-warning-list {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.feedback-warning-list p {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid #d8b48d;
+  border-radius: 16px;
+  background: #fff4e7;
+  color: #7a3713;
+}
+
 .review-form {
   gap: 16px;
 }
