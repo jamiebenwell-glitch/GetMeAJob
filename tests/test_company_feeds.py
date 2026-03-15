@@ -4,6 +4,7 @@ from getmeajob.providers.company_feeds import (
     _extract_lever_requirements,
     _extract_requirements,
     _extract_salary,
+    _greenhouse_page_to_text,
     _html_to_text,
     _is_target_job,
 )
@@ -11,7 +12,11 @@ from getmeajob.providers.company_feeds import (
 
 def test_is_target_job_filters_uk_engineering_roles() -> None:
     assert _is_target_job("Backend Engineer III", "London, UK")
+    assert _is_target_job("Senior Mechanical Engineer", "Coventry, United Kingdom")
+    assert _is_target_job("Controls Technician", "Milton Keynes, UK")
     assert not _is_target_job("Talent Community - Engineering", "Cambridge, UK")
+    assert not _is_target_job("Head of Visual Design", "Manchester, UK")
+    assert not _is_target_job("Finance Internal Controls Manager", "London, UK")
     assert not _is_target_job("Account Executive", "London, UK")
 
 
@@ -60,3 +65,21 @@ def test_html_to_text_decodes_escaped_html() -> None:
     text = _html_to_text("&lt;p&gt;Backend Engineer&lt;/p&gt;&lt;li&gt;Strong Python skills&lt;/li&gt;")
     assert "Backend Engineer" in text
     assert "Strong Python skills" in text
+
+
+def test_greenhouse_page_to_text_extracts_main_content() -> None:
+    html = """
+    <html>
+      <body>
+        <header>Jobs</header>
+        <main>
+          <h1>Electrical Engineer</h1>
+          <p>London, England, United Kingdom</p>
+          <p>You will own test rigs and support vehicle integration.</p>
+        </main>
+      </body>
+    </html>
+    """
+    text = _greenhouse_page_to_text(html)
+    assert "Electrical Engineer" in text
+    assert "support vehicle integration" in text

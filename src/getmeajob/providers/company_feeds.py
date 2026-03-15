@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 from requests import RequestException
 
 
-GREENHOUSE_URL = "https://boards-api.greenhouse.io/v1/boards/{board}/jobs?content=true"
+GREENHOUSE_URL = "https://boards-api.greenhouse.io/v1/boards/{board}/jobs"
 LEVER_URL = "https://api.lever.co/v0/postings/{board}?mode=json"
 
 UK_LOCATION_HINTS = (
@@ -25,10 +25,55 @@ UK_LOCATION_HINTS = (
     "glasgow",
     "cardiff",
     "remote, united kingdom",
+    "remote - united kingdom",
+    "remote - uk",
+    "oxford",
+    "milton keynes",
+    "coventry",
+    "warwick",
+    "silverstone",
+    "derby",
+    "southampton",
+    "bicester",
+    "reading",
+    "leamington spa",
+    "royal leamington spa",
+    "nottingham",
+    "birmingham",
 )
 
-ENGINEERING_TITLE_HINTS = ("engineer", "engineering", "sre", "devops", "firmware", "silicon")
-EXCLUDED_TITLE_HINTS = ("talent community",)
+ENGINEERING_TITLE_PATTERNS = (
+    r"\bengineer(?:ing)?\b",
+    r"\bdeveloper\b",
+    r"\bsre\b",
+    r"\bdevops\b",
+    r"\bfirmware\b",
+    r"\bsilicon\b",
+    r"\bmechanical\b",
+    r"\bmechatronics\b",
+    r"\bautomotive\b",
+    r"\baerospace\b",
+    r"\bavionics\b",
+    r"\bembedded\b",
+    r"\brobotics?\b",
+    r"\bautonomy\b",
+    r"\b(?:vehicle|systems|controls|manufacturing|automation|hardware|quality|test)\s+engineer\b",
+    r"\bfield engineer\b",
+    r"\bfield service engineer\b",
+    r"\bservice engineer\b",
+    r"\btechnician\b",
+    r"\bcad\b",
+)
+EXCLUDED_TITLE_HINTS = (
+    "talent community",
+    "brand designer",
+    "product designer",
+    "visual design",
+    "graphic designer",
+    "ux designer",
+    "ui designer",
+    "head of design",
+)
 SALARY_PATTERN = re.compile(
     r"([\u00A3\u0141]\s?\d{2,3}(?:,\d{3})+(?:\s?-\s?[\u00A3\u0141]\s?\d{2,3}(?:,\d{3})+)?)"
 )
@@ -88,6 +133,10 @@ STARTER_FEEDS = [
     CompanyFeed("StarCompliance", "starcompliance", "lever", "https://jobs.lever.co/starcompliance"),
     CompanyFeed("Monzo", "monzo", "greenhouse", "https://job-boards.greenhouse.io/monzo"),
     CompanyFeed("Graphcore", "graphcore", "greenhouse", "https://job-boards.greenhouse.io/graphcore"),
+    CompanyFeed("Anduril Industries", "andurilindustries", "greenhouse", "https://boards.greenhouse.io/andurilindustries"),
+    CompanyFeed("Autotrader", "autotrader", "greenhouse", "https://job-boards.greenhouse.io/autotrader"),
+    CompanyFeed("Jungheinrich", "jungheinrich", "greenhouse", "https://job-boards.greenhouse.io/jungheinrich"),
+    CompanyFeed("Wayve", "wayve", "greenhouse", "https://wayve.firststage.co/jobs"),
 ]
 
 
@@ -156,7 +205,7 @@ def _fetch_greenhouse(feed: CompanyFeed, timeout: int) -> list[CompanyJob]:
         if not _is_target_job(title, location):
             continue
 
-        description = _html_to_text(item.get("content", ""))
+        description = _fetch_greenhouse_job_text(item.get("absolute_url"), timeout)
         jobs.append(
             CompanyJob(
                 company=feed.company,
@@ -176,11 +225,32 @@ def _fetch_greenhouse(feed: CompanyFeed, timeout: int) -> list[CompanyJob]:
     return jobs
 
 
+def _fetch_greenhouse_job_text(url: str | None, timeout: int) -> str:
+    if not url:
+        return ""
+
+    html = requests.get(url, timeout=timeout).text
+    return _greenhouse_page_to_text(html)
+
+
+def _greenhouse_page_to_text(page_html: str) -> str:
+    soup = BeautifulSoup(page_html or "", "html.parser")
+    content = (
+        soup.select_one("main")
+        or soup.select_one("div[data-qa='job-description']")
+        or soup.select_one("div#content")
+        or soup.select_one("body")
+    )
+    if not content:
+        return ""
+    return _clean_text(content.get_text("\n", strip=True))
+
+
 def _is_target_job(title: str, location: str | None) -> bool:
     title_l = (title or "").lower()
     location_l = (location or "").lower()
 
-    if not any(hint in title_l for hint in ENGINEERING_TITLE_HINTS):
+    if not any(re.search(pattern, title_l) for pattern in ENGINEERING_TITLE_PATTERNS):
         return False
     if any(hint in title_l for hint in EXCLUDED_TITLE_HINTS):
         return False
