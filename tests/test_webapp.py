@@ -276,8 +276,12 @@ def test_review_submission_saves_history_for_signed_in_user(client: TestClient) 
     assert "Main Cover Letter" in response.text
     assert 'id="history-chart"' in response.text
     assert "Next improvements" in response.text
+    assert "What to change in your wording" in response.text
+    assert "You wrote" in response.text
+    assert "Try adding" in response.text
     assert "CV markup" not in response.text
     assert 'class="issue-card"' not in response.text
+    assert 'class="result-summary-strip"' in response.text
     assert 'class="result-overview-grid"' in response.text
 
     review_page = client.get("/review")

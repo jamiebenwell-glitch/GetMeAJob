@@ -153,12 +153,18 @@ def test_browser_review_results_and_history() -> None:
 
         review.wait_for_results()
         assert page.locator('[data-tab-trigger="results"]').get_attribute("aria-selected") == "true"
+        assert page.locator(".result-summary-strip").is_visible()
         assert page.locator(".result-overview-grid").is_visible()
         assert page.locator("text=CV markup").count() == 0
         assert page.locator(".issue-card").count() == 0
         assert int(page.locator(".score").first.text_content().strip().rstrip("%")) >= 60
+        page.wait_for_selector("text=What to change in your wording")
+        assert page.locator(".tailored-advice-card").count() >= 2
+        assert page.locator("text=You wrote").count() >= 1
+        assert page.locator("text=Try adding").count() >= 1
         page.wait_for_selector("text=Roles that fit this CV")
         assert page.locator(".suggestion-card").count() >= 1
+        assert page.locator(".result-summary-strip").evaluate("(el) => getComputedStyle(el).position") == "sticky"
         page.get_by_label("Question").fill("What should I change first?")
         page.get_by_role("button", name="Ask").click()
         page.wait_for_selector("text=Start with")
@@ -223,10 +229,12 @@ def test_browser_results_layout_stays_readable_on_mobile() -> None:
         review.submit_review()
         review.wait_for_results()
 
+        page.wait_for_selector("text=What to change in your wording")
         page.wait_for_selector("text=Roles that fit this CV")
         mobile_overflow = page.evaluate("() => document.documentElement.scrollWidth - window.innerWidth")
         assert mobile_overflow <= 2
         assert page.locator(".issue-card").count() == 0
+        assert page.locator(".tailored-advice-card").count() >= 1
         first_suggestion = page.locator(".suggestion-card").first.bounding_box()
         assert first_suggestion is not None
         assert first_suggestion["width"] <= 390

@@ -121,6 +121,34 @@ def test_recommend_roles_boosts_early_career_roles_for_student_cv() -> None:
     assert suggestions[0].score > suggestions[1].score
 
 
+def test_recommend_roles_excludes_senior_mechanical_roles_for_undergrad_cv() -> None:
+    suggestions = recommend_roles(
+        "Mechanical engineering undergraduate with CAD, testing, manufacturing, and prototype project work.",
+        [
+            {
+                "title": "Senior Mechanical Engineer",
+                "company": "SeniorCo",
+                "location": "Derby, United Kingdom",
+                "summary": "Lead design reviews and own complex mechanical systems. Requires 5+ years of experience.",
+                "key_requirements": ["CAD", "manufacturing", "analysis", "leadership"],
+                "apply_url": "https://example.com/senior-mech",
+            },
+            {
+                "title": "Mechanical Year in Industry",
+                "company": "PlacementCo",
+                "location": "Bristol, United Kingdom",
+                "summary": "Year in industry role covering CAD, testing, and manufacturing support.",
+                "key_requirements": ["CAD", "testing", "manufacturing"],
+                "apply_url": "https://example.com/placement-mech",
+            },
+        ],
+    )
+
+    assert suggestions
+    assert suggestions[0].title == "Mechanical Year in Industry"
+    assert all(item.title != "Senior Mechanical Engineer" for item in suggestions)
+
+
 def test_reviewer_gives_partial_credit_for_close_requirement_matches() -> None:
     result = review(
         "Backend Software Engineer. Build backend APIs and distributed systems on cloud infrastructure.",

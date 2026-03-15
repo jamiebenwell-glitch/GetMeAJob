@@ -341,6 +341,15 @@
         <div class="result-grid">
           {% for application in scored_applications %}
           <article class="result-card{% if not loop.first %} hidden{% endif %}" data-application="{{ application.index }}">
+            <div class="result-summary-strip" aria-label="Sticky review summary">
+              <div class="summary-score-pill">{{ application.score.total }}%</div>
+              <div class="summary-metric-pill"><span>Relevance</span><strong>{{ application.score.relevance }}%</strong></div>
+              <div class="summary-metric-pill"><span>Tailoring</span><strong>{{ application.score.tailoring }}%</strong></div>
+              <div class="summary-metric-pill"><span>Specificity</span><strong>{{ application.score.specificity }}%</strong></div>
+              <div class="summary-metric-pill"><span>Structure</span><strong>{{ application.score.structure }}%</strong></div>
+              <div class="summary-metric-pill"><span>Clarity</span><strong>{{ application.score.clarity }}%</strong></div>
+            </div>
+
             <div class="result-overview-grid">
               <section class="result-hero-card">
                 <div class="result-topline">
@@ -371,6 +380,47 @@
 
             <div class="results-columns">
               <div class="results-main-column">
+                <section class="tailored-advice-panel notes-panel">
+                  <div class="section-heading">
+                    <div>
+                      <p class="eyebrow">Tailored Advice</p>
+                      <h4>What to change in your wording</h4>
+                    </div>
+                  </div>
+                  <div class="tailored-advice-grid">
+                    {% for highlight in application.cv_highlights[:2] %}
+                    <article class="tailored-advice-card">
+                      <div class="tailored-advice-head">
+                        <span class="tailored-advice-source">From your CV</span>
+                        <strong>{{ highlight.reason }}</strong>
+                      </div>
+                      <p class="tailored-advice-label">You wrote</p>
+                      <blockquote class="tailored-advice-quote">{{ highlight.excerpt }}</blockquote>
+                      <p class="tailored-advice-label">Try adding</p>
+                      <p class="tailored-advice-text">{{ highlight.suggestion }}</p>
+                    </article>
+                    {% endfor %}
+                    {% for highlight in application.cover_highlights[:2] %}
+                    <article class="tailored-advice-card">
+                      <div class="tailored-advice-head">
+                        <span class="tailored-advice-source cover">From your cover letter</span>
+                        <strong>{{ highlight.reason }}</strong>
+                      </div>
+                      <p class="tailored-advice-label">You wrote</p>
+                      <blockquote class="tailored-advice-quote">{{ highlight.excerpt }}</blockquote>
+                      <p class="tailored-advice-label">Try adding</p>
+                      <p class="tailored-advice-text">{{ highlight.suggestion }}</p>
+                    </article>
+                    {% endfor %}
+                    {% if not application.cv_highlights and not application.cover_highlights %}
+                    <article class="tailored-advice-card tailored-advice-empty">
+                      <strong>No specific wording fixes were flagged in this pass.</strong>
+                      <p>Use the next improvements and requirement coverage sections to decide what to strengthen next.</p>
+                    </article>
+                    {% endif %}
+                  </div>
+                </section>
+
                 <section class="category-section notes-panel">
                   <h4>Requirement coverage</h4>
                   <div class="category-grid">

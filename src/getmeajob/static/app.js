@@ -553,7 +553,7 @@ function setupReviewPage() {
     if (lower.includes("keyword") || lower.includes("requirement")) {
       return `The main missing requirements are ${describeList(result.missing_keywords)}. The strongest matched terms are ${describeList(result.keyword_overlap)}.`;
     }
-    return `Focus on ${describeList(result.missing_keywords)} and the next improvements list.`;
+    return `Focus on ${describeList(result.missing_keywords)}, the next improvements list, and the tailored advice cards that quote your wording.`;
   }
 
   function addChatMessage(role, text) {
