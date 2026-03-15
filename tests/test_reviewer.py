@@ -93,3 +93,27 @@ def test_recommend_roles_penalizes_senior_roles_for_student_cv() -> None:
     senior = next(item for item in suggestions if item.title == "Senior Software Engineer")
     graduate = next(item for item in suggestions if item.title == "Graduate Software Engineer")
     assert senior.score < graduate.score
+
+
+def test_reviewer_gives_partial_credit_for_close_requirement_matches() -> None:
+    result = review(
+        "Backend Software Engineer. Build backend APIs and distributed systems on cloud infrastructure.",
+        "Software engineering student who built backend services and REST APIs in Python. Deployed coursework to AWS.",
+        "I want this backend role because I enjoy API design and scalable services.",
+    )
+
+    assert result.score.relevance >= 55
+    assert "backend" in result.keyword_overlap
+    assert "api" in result.keyword_overlap
+
+
+def test_reviewer_does_not_overpenalize_missing_preferred_requirement() -> None:
+    result = review(
+        "Mechanical Design Engineer. Must have CAD, testing, manufacturing, and analysis experience. Preferred FEA experience.",
+        "Mechanical engineering student with CAD, testing, manufacturing, and design project work. Improved prototype setup by 20%.",
+        "I want this design role because it matches my CAD and manufacturing project experience.",
+    )
+
+    assert result.score.relevance >= 60
+    assert result.score.total >= 60
+    assert "cad" in result.keyword_overlap

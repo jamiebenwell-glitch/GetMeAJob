@@ -1,229 +1,46 @@
+
 from __future__ import annotations
 
 import json
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
 
 STOPWORDS = {
-    "a",
-    "about",
-    "above",
-    "across",
-    "after",
-    "again",
-    "against",
-    "all",
-    "allow",
-    "along",
-    "already",
-    "also",
-    "although",
-    "always",
-    "am",
-    "an",
-    "and",
-    "any",
-    "are",
-    "around",
-    "as",
-    "at",
-    "be",
-    "because",
-    "been",
-    "before",
-    "being",
-    "below",
-    "between",
-    "both",
-    "but",
-    "by",
-    "can",
-    "could",
-    "do",
-    "each",
-    "for",
-    "from",
-    "further",
-    "had",
-    "has",
-    "have",
-    "he",
-    "her",
-    "here",
-    "hers",
-    "him",
-    "his",
-    "how",
-    "however",
-    "if",
-    "in",
-    "into",
-    "is",
-    "it",
-    "its",
-    "itself",
-    "just",
-    "may",
-    "might",
-    "more",
-    "most",
-    "must",
-    "need",
-    "needed",
-    "needs",
-    "no",
-    "not",
-    "now",
-    "of",
-    "on",
-    "once",
-    "only",
-    "or",
-    "other",
-    "our",
-    "ours",
-    "out",
-    "over",
-    "own",
-    "role",
-    "roles",
-    "same",
-    "she",
-    "should",
-    "so",
-    "some",
-    "such",
-    "than",
-    "that",
-    "the",
-    "their",
-    "theirs",
-    "them",
-    "then",
-    "there",
-    "these",
-    "they",
-    "this",
-    "those",
-    "through",
-    "to",
-    "too",
-    "under",
-    "until",
-    "up",
-    "very",
-    "was",
-    "we",
-    "were",
-    "what",
-    "when",
-    "where",
-    "which",
-    "while",
-    "who",
-    "will",
-    "with",
-    "within",
-    "work",
-    "working",
-    "would",
-    "you",
-    "your",
+    "a", "about", "above", "across", "after", "again", "against", "all", "allow", "along",
+    "already", "also", "although", "always", "am", "an", "and", "any", "are", "around",
+    "as", "at", "be", "because", "been", "before", "being", "below", "between", "both",
+    "but", "by", "can", "could", "do", "each", "for", "from", "further", "had", "has",
+    "have", "he", "her", "here", "hers", "him", "his", "how", "however", "if", "in",
+    "into", "is", "it", "its", "itself", "just", "may", "might", "more", "most", "must",
+    "need", "needed", "needs", "no", "not", "now", "of", "on", "once", "only", "or",
+    "other", "our", "ours", "out", "over", "own", "role", "roles", "same", "she",
+    "should", "so", "some", "such", "than", "that", "the", "their", "theirs", "them",
+    "then", "there", "these", "they", "this", "those", "through", "to", "too", "under",
+    "until", "up", "very", "was", "we", "were", "what", "when", "where", "which",
+    "while", "who", "will", "with", "within", "work", "working", "would", "you", "your",
 }
 
-KEEP_SHORT = {"cad", "cfd", "fem", "plc", "sap", "sql", "api", "iso"}
+KEEP_SHORT = {"cad", "cfd", "fem", "plc", "sap", "sql", "api", "iso", "qa", "ml", "ai"}
 GENERIC_TERMS = {
-    "application",
-    "applications",
-    "candidate",
-    "candidates",
-    "company",
-    "experience",
-    "individual",
-    "opportunity",
-    "responsibilities",
-    "responsibility",
-    "skills",
-    "support",
-    "team",
-    "teams",
+    "application", "applications", "candidate", "candidates", "company", "experience", "individual",
+    "opportunity", "responsibilities", "responsibility", "skills", "support", "team", "teams",
 }
 
 IMPACT_VERBS = {
-    "achieved",
-    "automated",
-    "built",
-    "created",
-    "delivered",
-    "designed",
-    "drove",
-    "improved",
-    "increased",
-    "launched",
-    "led",
-    "optimized",
-    "reduced",
-    "solved",
-    "streamlined",
+    "achieved", "automated", "built", "created", "delivered", "designed", "developed", "drove",
+    "improved", "increased", "launched", "led", "optimized", "reduced", "solved", "streamlined",
 }
 
 ROLE_FAMILY_HINTS: dict[str, set[str]] = {
-    "software": {
-        "api",
-        "backend",
-        "cloud",
-        "developer",
-        "devops",
-        "frontend",
-        "full-stack",
-        "fullstack",
-        "java",
-        "javascript",
-        "microservices",
-        "node",
-        "python",
-        "react",
-        "software",
-    },
-    "mechanical": {
-        "cad",
-        "cfd",
-        "fem",
-        "manufacturing",
-        "mechanical",
-        "prototype",
-        "solidworks",
-        "thermodynamics",
-        "tooling",
-    },
-    "electrical": {
-        "circuit",
-        "electrical",
-        "electronic",
-        "embedded",
-        "firmware",
-        "fpga",
-        "pcb",
-    },
-    "data": {
-        "analytics",
-        "data",
-        "etl",
-        "machine",
-        "learning",
-        "ml",
-        "sql",
-    },
-    "civil": {
-        "civil",
-        "geotechnical",
-        "infrastructure",
-        "structural",
-    },
+    "software": {"api", "backend", "cloud", "developer", "devops", "frontend", "full-stack", "fullstack", "java", "javascript", "microservices", "node", "python", "react", "software"},
+    "mechanical": {"cad", "cfd", "fem", "manufacturing", "mechanical", "prototype", "solidworks", "thermodynamics", "tooling"},
+    "electrical": {"circuit", "electrical", "electronic", "embedded", "firmware", "fpga", "pcb"},
+    "data": {"analytics", "data", "etl", "machine", "learning", "ml", "sql"},
+    "civil": {"civil", "geotechnical", "infrastructure", "structural"},
 }
 
 SENIORITY_PATTERNS: list[tuple[int, tuple[str, ...]]] = [
@@ -235,61 +52,74 @@ SENIORITY_PATTERNS: list[tuple[int, tuple[str, ...]]] = [
 ]
 
 EARLY_STAGE_PATTERNS = (
-    "undergraduate",
-    "student",
-    "intern",
-    "internship",
-    "placement",
-    "year in industry",
-    "industrial placement",
-    "graduate scheme",
-    "final year",
+    "undergraduate", "student", "intern", "internship", "placement", "year in industry",
+    "industrial placement", "graduate scheme", "final year",
 )
 
 CATEGORY_HINTS: dict[str, set[str]] = {
-    "technical": {
-        "analysis",
-        "cad",
-        "cfd",
-        "design",
-        "engineering",
-        "fem",
-        "matlab",
-        "modelling",
-        "simulation",
-        "solidworks",
-        "testing",
-    },
-    "manufacturing": {
-        "assembly",
-        "factory",
-        "lean",
-        "machining",
-        "manufacturing",
-        "production",
-        "process",
-        "prototype",
-        "quality",
-        "tooling",
-    },
-    "commercial": {
-        "client",
-        "commercial",
-        "customer",
-        "deadline",
-        "stakeholder",
-        "supplier",
-    },
-    "motivation": {
-        "career",
-        "develop",
-        "enthusiasm",
-        "interested",
-        "learn",
-        "motivation",
-        "passion",
-    },
+    "technical": {"analysis", "api", "backend", "cad", "cfd", "cloud", "controls", "design", "embedded", "engineering", "fem", "firmware", "frontend", "matlab", "modelling", "python", "react", "simulation", "software", "solidworks", "testing"},
+    "manufacturing": {"assembly", "factory", "lean", "machining", "manufacturing", "production", "process", "prototype", "quality", "safety", "tooling", "validation"},
+    "commercial": {"client", "commercial", "communication", "customer", "deadline", "project_management", "stakeholder", "supplier"},
+    "motivation": {"career", "develop", "enthusiasm", "interested", "learn", "motivation", "passion"},
 }
+CONCEPT_SYNONYMS: dict[str, set[str]] = {
+    "analysis": {"analysis", "analytical", "analyse", "analyze", "investigation"},
+    "api": {"api", "apis", "rest api", "restful api", "integration"},
+    "assembly": {"assembly", "integration build"},
+    "automation": {"automation", "automated"},
+    "autonomy": {"autonomy", "autonomous"},
+    "backend": {"backend", "server-side", "services", "service development"},
+    "cad": {"cad", "catia", "creo", "solidworks", "nx", "autocad"},
+    "cfd": {"cfd", "computational fluid dynamics"},
+    "cloud": {"aws", "azure", "cloud", "gcp", "kubernetes"},
+    "communication": {"communicate", "communication", "presented", "presentation"},
+    "controls": {"control", "controls", "control systems"},
+    "customer": {"customer", "client", "user-facing", "end user"},
+    "data": {"data", "dataset", "datasets"},
+    "design": {"design", "designed", "designing"},
+    "distributed_systems": {"distributed systems", "distributed system", "scalable systems", "scalable services", "microservices"},
+    "electrical": {"electrical", "electronics", "electronic"},
+    "embedded": {"embedded", "microcontroller", "real-time systems"},
+    "engineering": {"engineering", "engineer"},
+    "fem": {"fea", "fem", "finite element"},
+    "field": {"field engineer", "field service", "onsite"},
+    "firmware": {"firmware", "low-level software"},
+    "frontend": {"frontend", "front-end", "ui"},
+    "hardware": {"hardware", "electromechanical"},
+    "java": {"java"},
+    "leadership": {"lead", "led", "leadership", "mentor", "mentored", "mentoring"},
+    "machine_learning": {"ai", "machine learning", "ml"},
+    "manufacturing": {"manufacturing", "production", "industrialisation", "industrialization"},
+    "matlab": {"matlab", "simulink"},
+    "mechanical": {"mechanical", "mechanics", "mechanism"},
+    "modelling": {"modeling", "modelling", "models", "simulation models"},
+    "plc": {"plc", "programmable logic controller"},
+    "process": {"process", "process improvement"},
+    "project_management": {"project management", "programme management", "program management", "delivery planning"},
+    "prototype": {"prototype", "prototyping"},
+    "python": {"python"},
+    "quality": {"quality", "qa", "quality assurance"},
+    "react": {"react"},
+    "robotics": {"robot", "robotics"},
+    "safety": {"safety", "safe systems"},
+    "simulation": {"simulation", "simulations", "simulate"},
+    "software": {"software", "application development"},
+    "sql": {"sql", "postgres", "mysql"},
+    "stakeholder": {"stakeholder", "stakeholders", "cross-functional", "cross functional"},
+    "testing": {"test", "testing", "verification", "validation", "v&v"},
+    "tooling": {"tooling", "fixtures", "jigs"},
+}
+
+REQUIREMENT_PRIORITY_HINTS: list[tuple[float, tuple[str, ...], str]] = [
+    (1.35, ("must", "required", "essential", "minimum", "proven", "track record", "expertise in"), "hard"),
+    (0.75, ("preferred", "desirable", "nice to have", "bonus", "plus"), "preferred"),
+    (0.95, ("you will", "you'll", "responsible for", "deliver", "build", "own"), "responsibility"),
+]
+
+TITLE_CONCEPT_BOOST = 1.2
+TITLE_TOKEN_BOOST = 0.9
+MIN_RELEVANCE_FLOOR = 18
+MATCH_DISPLAY_THRESHOLD = 0.05
 
 
 @dataclass(frozen=True)
@@ -344,14 +174,44 @@ class RoleSuggestion:
     job_description: str
 
 
+@dataclass(frozen=True)
+class RequirementSignal:
+    concept: str
+    weight: float
+    priority: str
+    source_line: str
+
+
+CONCEPT_INDEX = {
+    synonym: concept for concept, synonyms in CONCEPT_SYNONYMS.items() for synonym in sorted(synonyms, key=len, reverse=True)
+}
+
 def _read_text(path: str | Path) -> str:
     return Path(path).read_text(encoding="utf-8", errors="ignore")
 
 
+def _normalize_text(text: str) -> str:
+    normalized = (text or "").lower()
+    replacements = {
+        "c++": " cpp ",
+        "c#": " csharp ",
+        ".net": " dotnet ",
+        "node.js": " nodejs ",
+        "full stack": " full-stack ",
+        "front end": " frontend ",
+        "back end": " backend ",
+        "year-in-industry": " year in industry ",
+    }
+    for source, target in replacements.items():
+        normalized = normalized.replace(source, target)
+    return re.sub(r"\s+", " ", normalized)
+
+
 def _tokenize(text: str) -> list[str]:
-    tokens = re.findall(r"[a-zA-Z][a-zA-Z\-]{1,}", text.lower())
+    tokens = re.findall(r"[a-zA-Z][a-zA-Z0-9#+\-/.]{1,}", _normalize_text(text))
     normalized: list[str] = []
     for token in tokens:
+        token = token.strip(".-/ ")
         if token in STOPWORDS:
             continue
         if len(token) < 4 and token not in KEEP_SHORT:
@@ -368,6 +228,25 @@ def _extract_keywords(text: str, limit: int = 14) -> list[str]:
     return [word for word, _ in ranked[:limit]]
 
 
+def _extract_concepts(text: str) -> Counter[str]:
+    normalized = f" {_normalize_text(text)} "
+    concepts: Counter[str] = Counter()
+    for concept, synonyms in CONCEPT_SYNONYMS.items():
+        for synonym in sorted(synonyms, key=len, reverse=True):
+            if " " in synonym or "-" in synonym:
+                pattern = re.escape(synonym)
+            else:
+                pattern = rf"\b{re.escape(synonym)}\b"
+            matches = re.findall(pattern, normalized)
+            if matches:
+                concepts[concept] += len(matches)
+    return concepts
+
+
+def _concept_label(concept: str) -> str:
+    return concept.replace("_", " ")
+
+
 def _job_text(job: dict[str, object]) -> str:
     requirements = job.get("key_requirements") or []
     if isinstance(requirements, list):
@@ -375,9 +254,7 @@ def _job_text(job: dict[str, object]) -> str:
     else:
         requirements_text = str(requirements)
     return " ".join(
-        str(
-            value or ""
-        )
+        str(value or "")
         for value in [
             job.get("title"),
             job.get("company"),
@@ -406,11 +283,9 @@ def _detect_job_seniority(job_text: str) -> int:
     normalized = f" {job_text.lower()} "
     years_required = _extract_years_of_experience(job_text)
     level = 1
-
     for score, patterns in SENIORITY_PATTERNS:
         if any(pattern in normalized for pattern in patterns):
             level = max(level, score)
-
     if years_required >= 8:
         level = max(level, 4)
     elif years_required >= 5:
@@ -419,7 +294,6 @@ def _detect_job_seniority(job_text: str) -> int:
         level = max(level, 2)
     elif years_required >= 1:
         level = max(level, 1)
-
     return level
 
 
@@ -427,7 +301,6 @@ def _detect_candidate_seniority(cv_text: str, cover_text: str) -> int:
     combined = f" {cv_text.lower()} {cover_text.lower()} "
     if any(pattern in combined for pattern in EARLY_STAGE_PATTERNS):
         return -1
-
     years = max(_extract_years_of_experience(cv_text), _extract_years_of_experience(cover_text))
     if years >= 8:
         return 4
@@ -464,7 +337,6 @@ def _fit_caps(job_text: str, cv_text: str, cover_text: str) -> tuple[int, int, l
     notes: list[str] = []
     total_cap = 100
     relevance_cap = 100
-
     job_level = _detect_job_seniority(job_text)
     candidate_level = _detect_candidate_seniority(cv_text, cover_text)
     required_years = _extract_years_of_experience(job_text)
@@ -474,7 +346,7 @@ def _fit_caps(job_text: str, cv_text: str, cover_text: str) -> tuple[int, int, l
         total_cap = min(total_cap, 35)
         relevance_cap = min(relevance_cap, 30)
         notes.append("This role reads as experienced or senior, but the application reads as student or early-career.")
-    elif job_level - candidate_level >= 2:
+    elif job_level >= 2 and job_level - candidate_level >= 2:
         total_cap = min(total_cap, 45)
         relevance_cap = min(relevance_cap, 40)
         notes.append("The application looks under-level for the seniority expected by this role.")
@@ -491,12 +363,9 @@ def _fit_caps(job_text: str, cv_text: str, cover_text: str) -> tuple[int, int, l
     job_families = _dominant_families(job_text)
     candidate_families = _dominant_families(f"{cv_text} {cover_text}")
     if job_families and candidate_families and not (job_families & candidate_families):
-        total_cap = min(total_cap, 25)
-        relevance_cap = min(relevance_cap, 20)
-        notes.append(
-            "This looks like a role-family mismatch: the advert and the application point to different disciplines."
-        )
-
+        total_cap = min(total_cap, 28)
+        relevance_cap = min(relevance_cap, 22)
+        notes.append("This looks like a role-family mismatch: the advert and the application point to different disciplines.")
     return total_cap, relevance_cap, notes
 
 
@@ -513,85 +382,238 @@ def _split_segments(text: str) -> list[str]:
     raw_segments = re.split(r"\n+|(?<=[.!?])\s+", text)
     return [segment.strip() for segment in raw_segments if segment.strip()]
 
+def _line_priority(line: str) -> tuple[float, str]:
+    lowered = line.lower()
+    for weight, markers, label in REQUIREMENT_PRIORITY_HINTS:
+        if any(marker in lowered for marker in markers):
+            return weight, label
+    return 0.9, "context"
+
+
+def _extract_requirement_signals(job_text: str) -> list[RequirementSignal]:
+    signals: list[RequirementSignal] = []
+    seen: set[tuple[str, str]] = set()
+    segments = _split_segments(job_text)
+    title = segments[0] if segments else job_text
+    title_concepts = _extract_concepts(title)
+    for concept in title_concepts:
+        signals.append(RequirementSignal(concept=concept, weight=TITLE_CONCEPT_BOOST, priority="title", source_line=title.strip()))
+        seen.add((concept, title.strip()))
+
+    for token in _extract_keywords(title, limit=5):
+        concept = CONCEPT_INDEX.get(token)
+        if concept or token in GENERIC_TERMS or token in STOPWORDS:
+            continue
+        pair = (token, title.strip())
+        if pair in seen:
+            continue
+        signals.append(RequirementSignal(concept=token, weight=TITLE_TOKEN_BOOST, priority="title", source_line=title.strip()))
+        seen.add(pair)
+
+    for line in _split_segments(job_text):
+        if _word_count(line) < 4:
+            continue
+        weight, priority = _line_priority(line)
+        concepts = _extract_concepts(line)
+        if concepts:
+            for concept, count in concepts.items():
+                pair = (concept, line)
+                if pair in seen:
+                    continue
+                signals.append(
+                    RequirementSignal(
+                        concept=concept,
+                        weight=weight + min(0.25, 0.08 * max(count - 1, 0)),
+                        priority=priority,
+                        source_line=line,
+                    )
+                )
+                seen.add(pair)
+            continue
+
+        for token in _extract_keywords(line, limit=4):
+            if token in GENERIC_TERMS:
+                continue
+            pair = (token, line)
+            if pair in seen:
+                continue
+            signals.append(RequirementSignal(concept=token, weight=max(0.55, weight - 0.15), priority=priority, source_line=line))
+            seen.add(pair)
+    return signals
+
+
+def _category_for_concept(concept: str) -> str:
+    for category, hints in CATEGORY_HINTS.items():
+        if concept in hints:
+            return category
+    return "general"
+
+
+def _build_requirement_map(job_text: str) -> dict[str, RequirementSignal]:
+    aggregated: dict[str, RequirementSignal] = {}
+    for signal in _extract_requirement_signals(job_text):
+        current = aggregated.get(signal.concept)
+        if current is None or signal.weight > current.weight:
+            aggregated[signal.concept] = signal
+    return aggregated
+
+
+def _candidate_concept_strength(text: str, *, cover_bonus: float = 0.0) -> dict[str, float]:
+    strengths: defaultdict[str, float] = defaultdict(float)
+    segment_counts: defaultdict[str, int] = defaultdict(int)
+
+    for segment in _split_segments(text):
+        concepts = _extract_concepts(segment)
+        if not concepts:
+            continue
+
+        evidence = 0.38 + cover_bonus
+        if re.search(r"\b\d+(?:%|x|\+)?\b", segment):
+            evidence += 0.22
+        if any(verb in segment.lower() for verb in IMPACT_VERBS):
+            evidence += 0.18
+        if any(marker in segment.lower() for marker in ("led", "managed", "owned", "delivered", "improved")):
+            evidence += 0.08
+        evidence = min(0.96, evidence)
+
+        for concept, count in concepts.items():
+            segment_counts[concept] += 1
+            strengths[concept] = max(strengths[concept], evidence + min(0.08, 0.03 * max(count - 1, 0)))
+
+    for concept, count in segment_counts.items():
+        if count > 1:
+            strengths[concept] = min(1.0, strengths[concept] + min(0.12, 0.04 * (count - 1)))
+    return dict(strengths)
+
+
+def _candidate_profile(cv_text: str, cover_text: str) -> dict[str, float]:
+    profile = _candidate_concept_strength(cv_text, cover_bonus=0.0)
+    cover_profile = _candidate_concept_strength(cover_text, cover_bonus=-0.04)
+    for concept, strength in cover_profile.items():
+        profile[concept] = max(profile.get(concept, 0.0), strength)
+    return profile
+
+
+def _coverage_strength(evidence: float) -> float:
+    if evidence <= 0:
+        return 0.0
+    return min(1.0, 0.55 + 0.45 * evidence)
+
 
 def _categorize_requirements(job_text: str, cv_text: str, cover_text: str) -> list[RequirementCategory]:
-    job_keywords = _extract_keywords(job_text)
-    document_tokens = set(_tokenize(cv_text + " " + cover_text))
-    categories: list[RequirementCategory] = []
-    assigned: set[str] = set()
+    requirements = _build_requirement_map(job_text)
+    evidence = _candidate_profile(cv_text, cover_text)
+    grouped: dict[str, list[RequirementSignal]] = defaultdict(list)
+    for signal in requirements.values():
+        grouped[_category_for_concept(signal.concept)].append(signal)
 
-    for name, hints in CATEGORY_HINTS.items():
-        category_keywords = [keyword for keyword in job_keywords if keyword in hints]
-        if not category_keywords:
+    categories: list[RequirementCategory] = []
+    for name in [key for key in CATEGORY_HINTS] + ["general"]:
+        signals = grouped.get(name, [])
+        if not signals:
             continue
-        assigned.update(category_keywords)
-        matched = [keyword for keyword in category_keywords if keyword in document_tokens]
-        missing = [keyword for keyword in category_keywords if keyword not in document_tokens]
-        coverage = int(round(100 * len(matched) / len(category_keywords))) if category_keywords else 0
+        total_weight = sum(signal.weight for signal in signals)
+        matched_weight = sum(signal.weight * _coverage_strength(evidence.get(signal.concept, 0.0)) for signal in signals)
+        matched = [_concept_label(signal.concept) for signal in signals if evidence.get(signal.concept, 0.0) > MATCH_DISPLAY_THRESHOLD]
+        missing = [_concept_label(signal.concept) for signal in signals if evidence.get(signal.concept, 0.0) <= MATCH_DISPLAY_THRESHOLD]
+        coverage = int(round(100 * matched_weight / max(total_weight, 0.01)))
         categories.append(
             RequirementCategory(
                 name=name,
-                label=name.capitalize(),
-                keywords=category_keywords,
-                coverage=coverage,
-                matched_keywords=matched,
-                missing_keywords=missing,
+                label="General requirements" if name == "general" else name.capitalize(),
+                keywords=[_concept_label(signal.concept) for signal in signals],
+                coverage=max(0, min(coverage, 100)),
+                matched_keywords=matched[:8],
+                missing_keywords=missing[:8],
             )
         )
-
-    remaining = [keyword for keyword in job_keywords if keyword not in assigned]
-    if remaining:
-        matched = [keyword for keyword in remaining if keyword in document_tokens]
-        missing = [keyword for keyword in remaining if keyword not in document_tokens]
-        coverage = int(round(100 * len(matched) / len(remaining)))
-        categories.append(
-            RequirementCategory(
-                name="general",
-                label="General requirements",
-                keywords=remaining,
-                coverage=coverage,
-                matched_keywords=matched,
-                missing_keywords=missing,
-            )
-        )
-
     return categories
 
+def _score_relevance(job_text: str, cv_text: str, cover_text: str, categories: list[RequirementCategory]) -> tuple[int, list[str], list[str]]:
+    requirements = _build_requirement_map(job_text)
+    evidence = _candidate_profile(cv_text, cover_text)
+    if not requirements:
+        return 55, [], []
 
-def _score_relevance(categories: list[RequirementCategory]) -> tuple[int, list[str], list[str]]:
-    if not categories:
-        return 50, [], []
+    total_weight = sum(signal.weight for signal in requirements.values())
+    matched_weight = sum(signal.weight * _coverage_strength(evidence.get(signal.concept, 0.0)) for signal in requirements.values())
+    score = int(round(100 * matched_weight / max(total_weight, 0.01)))
 
-    all_keywords = [keyword for category in categories for keyword in category.keywords]
-    matched = [keyword for category in categories for keyword in category.matched_keywords]
-    missing = [keyword for category in categories for keyword in category.missing_keywords]
-    score = int(round(100 * len(matched) / max(len(all_keywords), 1)))
-    return max(10, min(score, 100)), matched[:12], missing[:12]
+    job_families = _dominant_families(job_text)
+    candidate_families = _dominant_families(f"{cv_text} {cover_text}")
+    if job_families and candidate_families and job_families & candidate_families:
+        score += 8
+    elif job_families and candidate_families and not (job_families & candidate_families):
+        score -= 15
+
+    title_segments = _split_segments(job_text)
+    title_text = title_segments[0] if title_segments else job_text
+    title_keywords = _extract_keywords(title_text, limit=6)
+    matched_title = sum(1 for token in title_keywords if token in _tokenize(cv_text + " " + cover_text))
+    score += min(10, matched_title * 3)
+
+    matched = []
+    missing = []
+    sorted_requirements = sorted(requirements.values(), key=lambda item: (-item.weight, item.concept))
+    for signal in sorted_requirements:
+        label = _concept_label(signal.concept)
+        if evidence.get(signal.concept, 0.0) > MATCH_DISPLAY_THRESHOLD:
+            if label not in matched:
+                matched.append(label)
+        else:
+            if label not in missing:
+                missing.append(label)
+
+    if score > 0 and matched:
+        score = max(MIN_RELEVANCE_FLOOR, score)
+    return max(8, min(score, 100)), matched[:12], missing[:12]
 
 
-def _score_tailoring(job_text: str, cover_text: str) -> int:
+def _score_tailoring(job_text: str, cv_text: str, cover_text: str) -> int:
+    score = 42
+    cover_lower = cover_text.lower()
     company = _extract_company_name(job_text)
-    if company and company.lower() in cover_text.lower():
-        return 90
-    role_match = re.search(r"(?i)(role|position|title)[:\s]+(.{3,80})", job_text)
-    if role_match and role_match.group(2).strip().lower() in cover_text.lower():
-        return 75
-    return 45
+    if company and company.lower() in cover_lower:
+        score += 18
+
+    title_segments = _split_segments(job_text)
+    title = title_segments[0] if title_segments else job_text
+    title_keywords = [token for token in _extract_keywords(title, limit=8) if token not in GENERIC_TERMS]
+    echoed_title = sum(1 for token in title_keywords if token in _tokenize(cover_text))
+    score += min(16, echoed_title * 4)
+
+    high_priority = sorted(_build_requirement_map(job_text).values(), key=lambda item: (-item.weight, item.concept))[:5]
+    cover_concepts = _extract_concepts(cover_text)
+    echoed_requirements = sum(1 for signal in high_priority if cover_concepts.get(signal.concept, 0) > 0)
+    score += min(18, echoed_requirements * 4)
+
+    if any(word in cover_lower for word in ("interested", "motivation", "why", "because", "excited")):
+        score += 6
+    if re.search(r"\b\d+(?:%|x|\+)?\b", cover_text):
+        score += 6
+
+    cv_concepts = _extract_concepts(cv_text)
+    if company and company.lower() in cv_text.lower() and company.lower() in cover_lower:
+        score += 4
+    if not cover_concepts and not cv_concepts:
+        score = min(score, 40)
+    return max(20, min(score, 95))
 
 
 def _score_specificity(cv_text: str, cover_text: str) -> int:
     combined = cv_text + "\n" + cover_text
-    numbers = len(re.findall(r"\b\d+%?\b", combined))
+    numbers = len(re.findall(r"\b\d+(?:%|x|\+)?\b", combined))
     impact = sum(1 for w in _tokenize(combined) if w in IMPACT_VERBS)
-    score = min(100, 25 + numbers * 3 + impact * 4)
-    return max(10, score)
+    concrete_concepts = len(_extract_concepts(combined))
+    score = 28 + numbers * 4 + impact * 5 + concrete_concepts * 2
+    return max(12, min(score, 100))
 
 
 def _score_structure(cv_text: str, cover_text: str) -> int:
     cv_words = _word_count(cv_text)
     cover_words = _word_count(cover_text)
-    cv_score = 100 if 250 <= cv_words <= 850 else 60
-    cover_score = 100 if 180 <= cover_words <= 450 else 60
+    cv_score = 96 if 220 <= cv_words <= 900 else 62
+    cover_score = 92 if 140 <= cover_words <= 500 else 64
     return int(round((cv_score + cover_score) / 2))
 
 
@@ -602,89 +624,92 @@ def _score_clarity(texts: Iterable[str]) -> int:
     if not lengths:
         return 50
     avg_len = sum(lengths) / len(lengths)
-    if 10 <= avg_len <= 22:
+    if 9 <= avg_len <= 22:
         return 90
     if 22 < avg_len <= 30:
         return 75
     return 55
 
 
-def _build_highlights(text: str, categories: list[RequirementCategory], start_id: int, doc_name: str) -> list[Highlight]:
+def _high_priority_missing(job_text: str, cv_text: str, cover_text: str, limit: int = 4) -> list[str]:
+    requirements = sorted(_build_requirement_map(job_text).values(), key=lambda item: (-item.weight, item.concept))
+    evidence = _candidate_profile(cv_text, cover_text)
+    missing: list[str] = []
+    for signal in requirements:
+        if evidence.get(signal.concept, 0.0) > MATCH_DISPLAY_THRESHOLD:
+            continue
+        label = _concept_label(signal.concept)
+        if label not in missing:
+            missing.append(label)
+        if len(missing) >= limit:
+            break
+    return missing
+
+
+def _build_highlights(text: str, job_text: str, start_id: int, doc_name: str) -> list[Highlight]:
     highlights: list[Highlight] = []
     segments = _split_segments(text)
-    missing_focus = [keyword for category in categories for keyword in category.missing_keywords][:4]
+    focus = _high_priority_missing(job_text, text if doc_name == "CV" else "", text if doc_name != "CV" else "", limit=3)
 
     for segment in segments:
         if len(highlights) >= 3:
             break
-
-        tokens = set(_tokenize(segment))
         words = re.findall(r"\b\w+\b", segment)
+        concepts = _extract_concepts(segment)
+        lowered = segment.lower()
 
         if len(words) > 35:
-            highlights.append(
-                Highlight(
-                    issue_id=start_id + len(highlights),
-                    excerpt=segment,
-                    reason=f"{doc_name} sentence is too dense.",
-                    suggestion="Rewrite this as two shorter points so the recruiter can scan it quickly.",
-                )
-            )
+            highlights.append(Highlight(start_id + len(highlights), segment, f"{doc_name} sentence is too dense.", "Rewrite this as two shorter points so a hiring manager can scan it quickly."))
             continue
 
-        if any(verb in segment.lower() for verb in IMPACT_VERBS) and not re.search(r"\b\d+%?\b", segment):
-            highlights.append(
-                Highlight(
-                    issue_id=start_id + len(highlights),
-                    excerpt=segment,
-                    reason=f"{doc_name} claim lacks proof.",
-                    suggestion="Add a measurable result, timescale, or scale of work here.",
-                )
-            )
+        if concepts and any(verb in lowered for verb in IMPACT_VERBS) and not re.search(r"\b\d+(?:%|x|\+)?\b", segment):
+            highlights.append(Highlight(start_id + len(highlights), segment, f"{doc_name} claim lacks proof.", "Add a measurable result, scale, or outcome so the point reads as credible evidence."))
             continue
 
-        if missing_focus and len(words) >= 8 and not any(keyword in tokens for keyword in missing_focus):
-            focus = ", ".join(missing_focus[:2])
-            highlights.append(
-                Highlight(
-                    issue_id=start_id + len(highlights),
-                    excerpt=segment,
-                    reason=f"{doc_name} point is too generic for this advert.",
-                    suggestion=f"Link this point to the advert more directly, for example {focus}.",
-                )
-            )
+        if doc_name == "Cover letter" and len(concepts) <= 1 and any(word in lowered for word in ("interested", "passion", "fit", "opportunity")):
+            target = ", ".join(focus[:2]) if focus else "the role requirements"
+            highlights.append(Highlight(start_id + len(highlights), segment, "Cover letter point is too generic.", f"Replace this with a role-specific sentence tied to {target} and one concrete example."))
+            continue
 
+        if doc_name == "CV" and len(words) >= 8 and not concepts and focus:
+            highlights.append(Highlight(start_id + len(highlights), segment, "CV point does not help this application enough.", f"Use this space for evidence linked to {', '.join(focus[:2])} instead."))
+            continue
+
+        segment_labels = {_concept_label(concept) for concept in concepts}
+        if focus and len(words) >= 8 and not any(item in segment_labels for item in focus):
+            highlights.append(Highlight(start_id + len(highlights), segment, f"{doc_name} point is not aligned tightly enough to the advert.", f"Tie this point more directly to {', '.join(focus[:2])}."))
     return highlights
 
-
 def recommend_roles(cv_text: str, jobs: list[dict[str, object]], limit: int = 5) -> list[RoleSuggestion]:
-    cv_tokens = set(_tokenize(cv_text))
-    if not cv_tokens:
+    evidence = _candidate_profile(cv_text, "")
+    if not evidence:
         return []
 
     ranked: list[tuple[int, RoleSuggestion]] = []
     for job in jobs:
         text = _job_text(job)
-        job_keywords = _extract_keywords(text, limit=18)
-        if not job_keywords:
+        requirements = _build_requirement_map(text)
+        if not requirements:
             continue
 
-        matched = [keyword for keyword in job_keywords if keyword in cv_tokens]
+        total_weight = sum(signal.weight for signal in requirements.values())
+        matched_weight = sum(signal.weight * _coverage_strength(evidence.get(signal.concept, 0.0)) for signal in requirements.values())
+        base_score = int(round(100 * matched_weight / max(total_weight, 0.01)))
+        matched = [_concept_label(signal.concept) for signal in requirements.values() if evidence.get(signal.concept, 0.0) > MATCH_DISPLAY_THRESHOLD]
         if not matched:
             continue
 
-        title_tokens = set(_tokenize(str(job.get("title") or "")))
-        requirement_tokens = set(_tokenize(" ".join(str(item) for item in (job.get("key_requirements") or []))))
-        title_hits = len(title_tokens & cv_tokens)
-        requirement_hits = len(requirement_tokens & cv_tokens)
-        base_score = int(round(100 * len(matched) / len(job_keywords)))
-        score = min(99, base_score + title_hits * 7 + requirement_hits * 2)
+        title_text = str(job.get("title") or "")
+        title_keywords = _extract_keywords(title_text, limit=6)
+        title_hits = sum(1 for token in title_keywords if token in _tokenize(cv_text))
+        score = base_score + min(12, title_hits * 3)
+
         total_cap, _, _ = _fit_caps(text, cv_text, "")
         score = min(score, total_cap)
         if total_cap <= 35:
-            score = min(score, 15)
+            score = min(score, 18)
         elif total_cap >= 80:
-            score = max(score, 25)
+            score = max(score, 24)
 
         suggestion = RoleSuggestion(
             title=str(job.get("title") or "Untitled role"),
@@ -711,51 +736,35 @@ def recommend_roles(cv_text: str, jobs: list[dict[str, object]], limit: int = 5)
 
 def review(job_text: str, cv_text: str, cover_text: str) -> ReviewResult:
     categories = _categorize_requirements(job_text, cv_text, cover_text)
-    relevance, overlap, missing = _score_relevance(categories)
-    tailoring = _score_tailoring(job_text, cover_text)
+    relevance, overlap, missing = _score_relevance(job_text, cv_text, cover_text, categories)
+    tailoring = _score_tailoring(job_text, cv_text, cover_text)
     specificity = _score_specificity(cv_text, cover_text)
     structure = _score_structure(cv_text, cover_text)
     clarity = _score_clarity([cv_text, cover_text])
     total_cap, relevance_cap, fit_notes = _fit_caps(job_text, cv_text, cover_text)
 
     relevance = min(relevance, relevance_cap)
-
-    total = int(
-        round(
-            relevance * 0.35
-            + tailoring * 0.2
-            + specificity * 0.2
-            + structure * 0.15
-            + clarity * 0.1
-        )
-    )
+    total = int(round(relevance * 0.4 + tailoring * 0.18 + specificity * 0.18 + structure * 0.12 + clarity * 0.12))
     total = min(total, total_cap)
 
     notes: list[str] = list(fit_notes)
-    low_categories = [category.label for category in categories if category.coverage < 50]
-    if low_categories:
-        notes.append(f"Strengthen weak requirement areas: {', '.join(low_categories[:3])}.")
-    if tailoring < 70:
-        notes.append("Tailor the cover letter with the company name and role title.")
-    if specificity < 70:
-        notes.append("Add quantified outcomes and stronger proof of impact.")
+    weak_categories = [category.label for category in categories if category.coverage < 55]
+    if weak_categories:
+        notes.append(f"Strengthen weak requirement areas: {', '.join(weak_categories[:3])}.")
+    if tailoring < 68:
+        notes.append("Make the cover letter more role-specific by naming the company, the role, and the most relevant requirements.")
+    if specificity < 72:
+        notes.append("Add stronger evidence: measurable outcomes, technical depth, and clear ownership.")
     if structure < 70:
-        notes.append("Keep CV around 1 page and cover letter around 200-400 words.")
+        notes.append("Keep the CV concise and the cover letter tightly focused on the target role.")
     if clarity < 70:
-        notes.append("Shorten dense sentences so a recruiter can scan faster.")
+        notes.append("Shorten dense sentences so the strongest evidence is easy to scan.")
 
-    cv_highlights = _build_highlights(cv_text, categories, 1, "CV")
-    cover_highlights = _build_highlights(cover_text, categories, 101, "Cover letter")
+    cv_highlights = _build_highlights(cv_text, job_text, 1, "CV")
+    cover_highlights = _build_highlights(cover_text, job_text, 101, "Cover letter")
 
     return ReviewResult(
-        score=ReviewScore(
-            total=total,
-            relevance=relevance,
-            tailoring=tailoring,
-            specificity=specificity,
-            structure=structure,
-            clarity=clarity,
-        ),
+        score=ReviewScore(total=total, relevance=relevance, tailoring=tailoring, specificity=specificity, structure=structure, clarity=clarity),
         notes=notes,
         keyword_overlap=overlap,
         missing_keywords=missing,
