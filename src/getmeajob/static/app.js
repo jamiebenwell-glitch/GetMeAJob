@@ -326,6 +326,23 @@ function setupReviewPage() {
     }
   }
 
+  function setDraftStatus(container, kind, message, tone = "warning") {
+    const status = container.querySelector(`[data-draft-status="${kind}"]`);
+    if (!(status instanceof HTMLElement)) {
+      return;
+    }
+    if (!message) {
+      status.hidden = true;
+      status.textContent = "";
+      status.classList.remove("is-warning", "is-success");
+      return;
+    }
+    status.hidden = false;
+    status.textContent = message;
+    status.classList.toggle("is-warning", tone === "warning");
+    status.classList.toggle("is-success", tone === "success");
+  }
+
   function applyDocumentDraft(container, kind, draft) {
     const isCv = kind === "cv";
     const draftIdSelector = isCv ? 'input[name="cv_draft_id"]' : 'input[name="cover_draft_id"]';
@@ -344,6 +361,7 @@ function setupReviewPage() {
     }
 
     updateFileHint(container, fileInputName, `Loaded saved draft: ${draft.title || "Draft"}`);
+    setDraftStatus(container, kind, "");
     persistReviewState();
   }
 
@@ -638,6 +656,7 @@ function setupReviewPage() {
     const draftId = readSetValue(set, idSelector).trim();
 
     if (!content) {
+      setDraftStatus(set, kind, "Add document text before saving this draft.", "warning");
       button.textContent = "Add text first";
       window.setTimeout(() => {
         button.textContent = kind === "cv" ? "Save CV draft" : "Save cover draft";
@@ -656,13 +675,15 @@ function setupReviewPage() {
         body: JSON.stringify({ kind, title, content, draft_id: draftId || null }),
       });
       if (response.status === 401) {
-        const authButton = document.querySelector('.site-auth a[href^="/auth/login/google"]');
-        if (authButton instanceof HTMLAnchorElement) {
-          persistReviewState();
-          window.location.href = authButton.href;
-          return;
-        }
-        throw new Error("Sign in to save drafts.");
+        persistReviewState();
+        setDraftStatus(
+          set,
+          kind,
+          "Sign in with Google to save drafts. Your current text is still available in the editor.",
+          "warning"
+        );
+        button.textContent = "Sign in to save";
+        return;
       }
       if (!response.ok) {
         throw new Error("Draft save failed.");
@@ -671,9 +692,11 @@ function setupReviewPage() {
       setFieldValue(set, idSelector, String(saved.id || ""));
       setFieldValue(set, titleSelector, saved.title || title);
       upsertDraftCard(kind, saved);
+      setDraftStatus(set, kind, "Draft saved.", "success");
       button.textContent = "Saved";
       persistReviewState();
     } catch (error) {
+      setDraftStatus(set, kind, error instanceof Error ? error.message : "Draft save failed.", "warning");
       button.textContent = error instanceof Error ? error.message : "Draft save failed";
     } finally {
       window.setTimeout(() => {

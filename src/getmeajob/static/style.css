@@ -377,6 +377,7 @@ select {
 .suggestion-meta,
 .suggestion-keywords,
 .markup-intro,
+.draft-status,
 .document-help,
 .panel-empty-state p,
 .file-hint,
@@ -930,6 +931,27 @@ button,
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.draft-status {
+  margin: -2px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-soft);
+  font-size: 0.88rem;
+}
+
+.draft-status.is-warning {
+  border-color: #efc5be;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.draft-status.is-success {
+  border-color: #b9dbc0;
+  background: #eef8f0;
+  color: var(--success);
 }
 
 .mini-heading h4 {

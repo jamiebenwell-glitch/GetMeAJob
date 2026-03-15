@@ -57,6 +57,35 @@ def test_browser_review_supports_manual_text_entry() -> None:
         browser.close()
 
 
+def test_browser_guest_draft_save_does_not_break_review_flow() -> None:
+    with run_server() as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1200})
+        review = ReviewerPage(page)
+        review.goto(f"{base_url}/review")
+
+        first_set = review.first_set()
+        first_set.get_by_label("Paste CV text").fill(
+            "Mechanical engineering student with CAD, testing, and manufacturing project work."
+        )
+        first_set.get_by_role("button", name="Save CV draft").click()
+
+        page.wait_for_selector("text=Sign in with Google to save drafts.")
+        assert page.url == f"{base_url}/review"
+
+        first_set.get_by_label("Job advert text").fill(
+            "Mechanical Design Engineer. Must have CAD, testing, manufacturing, and analysis experience. Preferred FEA experience."
+        )
+        first_set.get_by_label("Paste cover letter text").fill(
+            "I want this design role because it matches my CAD and manufacturing project experience."
+        )
+        review.submit_review()
+        review.wait_for_results()
+
+        assert int(page.locator(".score").first.text_content().strip().rstrip("%")) >= 60
+        browser.close()
+
+
 def test_browser_signed_in_draft_save_and_load() -> None:
     with run_server() as base_url, tempfile.TemporaryDirectory() as temp_dir, sync_playwright() as playwright:
         temp_path = Path(temp_dir)

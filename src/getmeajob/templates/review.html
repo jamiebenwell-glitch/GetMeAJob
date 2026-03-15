@@ -38,6 +38,7 @@
           </div>
           <button type="button" class="ghost save-draft" data-kind="cv">Save CV draft</button>
         </div>
+        <p class="draft-status" data-draft-status="cv" hidden></p>
         <p class="document-help">Upload a file to extract the text, then edit it directly here before reviewing.</p>
         <input type="hidden" name="cv_draft_id" value="{{ application.cv_draft_id }}" />
         <label>
@@ -63,6 +64,7 @@
           </div>
           <button type="button" class="ghost save-draft" data-kind="cover_letter">Save cover draft</button>
         </div>
+        <p class="draft-status" data-draft-status="cover_letter" hidden></p>
         <p class="document-help">Keep one base version and tailor the wording for each role in the editor below.</p>
         <input type="hidden" name="cover_draft_id" value="{{ application.cover_draft_id }}" />
         <label>
@@ -552,6 +554,7 @@
             </div>
             <button type="button" class="ghost save-draft" data-kind="cv">Save CV draft</button>
           </div>
+          <p class="draft-status" data-draft-status="cv" hidden></p>
           <p class="document-help">Upload a file to extract the text, then edit it directly here before reviewing.</p>
           <input type="hidden" name="cv_draft_id" value="" />
           <label>
@@ -577,6 +580,7 @@
             </div>
             <button type="button" class="ghost save-draft" data-kind="cover_letter">Save cover draft</button>
           </div>
+          <p class="draft-status" data-draft-status="cover_letter" hidden></p>
           <p class="document-help">Keep one base version and tailor the wording for each role in the editor below.</p>
           <input type="hidden" name="cover_draft_id" value="" />
           <label>
