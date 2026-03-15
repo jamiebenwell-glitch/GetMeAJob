@@ -312,6 +312,36 @@ def test_signed_in_user_can_reopen_saved_review(client: TestClient) -> None:
     assert "Main CV against" in history_page.text
 
 
+def test_signed_in_user_can_open_legacy_saved_review_without_snapshot(client: TestClient) -> None:
+    client.get("/test/login", follow_redirects=False)
+    storage.init_db()
+    with storage._connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO review_runs (
+                user_id,
+                job_title,
+                job_url,
+                score_total,
+                score_relevance,
+                score_tailoring,
+                score_specificity,
+                score_structure,
+                score_clarity,
+                cv_title,
+                cover_title
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (1, "Legacy Mechanical Role", "", 71, 72, 70, 68, 75, 69, "Legacy CV", "Legacy Cover"),
+        )
+
+    history_page = client.get("/review/history/1")
+    assert history_page.status_code == 200
+    assert "Legacy Mechanical Role" in history_page.text
+    assert "This saved review was created before full snapshot storage was enabled." in history_page.text
+    assert "71%" in history_page.text
+
+
 def test_review_submission_keeps_strong_fit_above_pass_threshold(client: TestClient) -> None:
     response = client.post(
         "/review",

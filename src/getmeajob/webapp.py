@@ -386,6 +386,27 @@ def _review_application_from_history(review_run: dict[str, Any]) -> dict[str, An
     payload = review_run.get("application_payload")
     if isinstance(payload, dict):
         application.update(payload)
+    else:
+        application.update(
+            {
+                "job": str(review_run.get("job_title") or ""),
+                "job_url": str(review_run.get("job_url") or ""),
+                "cv_draft_title": str(review_run.get("cv_title") or "Saved CV"),
+                "cover_draft_title": str(review_run.get("cover_title") or "Saved Cover Letter"),
+                "score": {
+                    "total": int(review_run.get("score_total") or 0),
+                    "relevance": int(review_run.get("score_relevance") or 0),
+                    "tailoring": int(review_run.get("score_tailoring") or 0),
+                    "specificity": int(review_run.get("score_specificity") or 0),
+                    "structure": int(review_run.get("score_structure") or 0),
+                    "clarity": int(review_run.get("score_clarity") or 0),
+                },
+                "notes": [
+                    "This saved review was created before full snapshot storage was enabled.",
+                    "Scores are preserved, but the original CV and cover letter text were not stored in that older format.",
+                ],
+            }
+        )
     application["index"] = 1
     application["errors"] = list(application.get("errors") or [])
     application["notes"] = list(application.get("notes") or [])
