@@ -28,6 +28,7 @@ KEEP_SHORT = {"cad", "cfd", "fem", "plc", "sap", "sql", "api", "iso", "qa", "ml"
 GENERIC_TERMS = {
     "application", "applications", "candidate", "candidates", "company", "experience", "individual",
     "opportunity", "responsibilities", "responsibility", "skills", "support", "team", "teams",
+    "graduate", "placement", "internship", "industry", "year", "analyst", "apprentice",
 }
 
 IMPACT_VERBS = {
@@ -37,9 +38,9 @@ IMPACT_VERBS = {
 
 ROLE_FAMILY_HINTS: dict[str, set[str]] = {
     "software": {"api", "backend", "cloud", "developer", "devops", "frontend", "full-stack", "fullstack", "java", "javascript", "microservices", "node", "python", "react", "software"},
-    "mechanical": {"cad", "cfd", "fem", "manufacturing", "mechanical", "prototype", "solidworks", "thermodynamics", "tooling"},
+    "mechanical": {"cad", "cfd", "fem", "lean", "manufacturing", "mechanical", "prototype", "solidworks", "thermodynamics", "tooling"},
     "electrical": {"circuit", "electrical", "electronic", "embedded", "firmware", "fpga", "pcb"},
-    "data": {"analytics", "data", "etl", "machine", "learning", "ml", "sql"},
+    "data": {"analytics", "dashboard", "data", "etl", "machine", "learning", "ml", "sql"},
     "civil": {"civil", "geotechnical", "infrastructure", "structural"},
 }
 
@@ -80,7 +81,7 @@ CONCEPT_SYNONYMS: dict[str, set[str]] = {
     "communication": {"communicate", "communication", "presented", "presentation"},
     "controls": {"control", "controls", "control systems"},
     "customer": {"customer", "client", "user-facing", "end user"},
-    "data": {"data", "dataset", "datasets"},
+    "data": {"data", "dataset", "datasets", "report", "reporting", "reports", "dashboard", "dashboards"},
     "design": {"design", "designed", "designing"},
     "distributed_systems": {"distributed systems", "distributed system", "scalable systems", "scalable services", "microservices"},
     "electrical": {"electrical", "electronics", "electronic"},
@@ -93,13 +94,14 @@ CONCEPT_SYNONYMS: dict[str, set[str]] = {
     "hardware": {"hardware", "electromechanical"},
     "java": {"java"},
     "leadership": {"lead", "led", "leadership", "mentor", "mentored", "mentoring"},
+    "lean": {"lean", "continuous improvement", "kaizen"},
     "machine_learning": {"ai", "machine learning", "ml"},
     "manufacturing": {"manufacturing", "production", "industrialisation", "industrialization"},
     "matlab": {"matlab", "simulink"},
     "mechanical": {"mechanical", "mechanics", "mechanism"},
     "modelling": {"modeling", "modelling", "models", "simulation models"},
     "plc": {"plc", "programmable logic controller"},
-    "process": {"process", "process improvement"},
+    "process": {"process", "process improvement", "production support", "continuous improvement", "lean improvement"},
     "project_management": {"project management", "programme management", "program management", "delivery planning"},
     "prototype": {"prototype", "prototyping"},
     "python": {"python"},
@@ -163,6 +165,7 @@ class ReviewResult:
     missing_keywords: list[str]
     cv_highlights: list[Highlight]
     cover_highlights: list[Highlight]
+    tailored_advice: list["TailoredAdvice"]
     categories: list[RequirementCategory]
 
 
@@ -177,6 +180,15 @@ class RoleSuggestion:
     matched_keywords: list[str]
     summary: str
     job_description: str
+
+
+@dataclass(frozen=True)
+class TailoredAdvice:
+    source: str
+    reason: str
+    excerpt: str
+    suggestion: str
+    target_requirements: list[str]
 
 
 @dataclass(frozen=True)
@@ -497,10 +509,14 @@ def _candidate_concept_strength(text: str, *, cover_bonus: float = 0.0) -> dict[
 
 
 def _candidate_profile(cv_text: str, cover_text: str) -> dict[str, float]:
-    profile = _candidate_concept_strength(cv_text, cover_bonus=0.0)
+    cv_profile = _candidate_concept_strength(cv_text, cover_bonus=0.0)
     cover_profile = _candidate_concept_strength(cover_text, cover_bonus=-0.04)
+    profile = dict(cv_profile)
     for concept, strength in cover_profile.items():
-        profile[concept] = max(profile.get(concept, 0.0), strength)
+        if concept in cv_profile:
+            profile[concept] = max(profile.get(concept, 0.0), strength)
+        else:
+            profile[concept] = max(profile.get(concept, 0.0), strength * 0.68)
     return profile
 
 
@@ -622,8 +638,19 @@ def _score_specificity(cv_text: str, cover_text: str) -> int:
 def _score_structure(cv_text: str, cover_text: str) -> int:
     cv_words = _word_count(cv_text)
     cover_words = _word_count(cover_text)
-    cv_score = 96 if 220 <= cv_words <= 900 else 62
-    cover_score = 92 if 140 <= cover_words <= 500 else 64
+    if 220 <= cv_words <= 900:
+        cv_score = 96
+    elif 80 <= cv_words < 220:
+        cv_score = 82
+    else:
+        cv_score = 62
+
+    if 140 <= cover_words <= 500:
+        cover_score = 92
+    elif 60 <= cover_words < 140:
+        cover_score = 78
+    else:
+        cover_score = 64
     return int(round((cv_score + cover_score) / 2))
 
 
@@ -654,6 +681,22 @@ def _high_priority_missing(job_text: str, cv_text: str, cover_text: str, limit: 
         if len(missing) >= limit:
             break
     return missing
+
+
+def _cover_only_requirement_gaps(job_text: str, cv_text: str, cover_text: str, limit: int = 5) -> list[str]:
+    requirements = sorted(_build_requirement_map(job_text).values(), key=lambda item: (-item.weight, item.concept))[:limit]
+    cv_profile = _candidate_concept_strength(cv_text, cover_bonus=0.0)
+    cover_profile = _candidate_concept_strength(cover_text, cover_bonus=-0.04)
+    gaps: list[str] = []
+    for signal in requirements:
+        if cover_profile.get(signal.concept, 0.0) <= MATCH_DISPLAY_THRESHOLD:
+            continue
+        if cv_profile.get(signal.concept, 0.0) > MATCH_DISPLAY_THRESHOLD:
+            continue
+        label = _concept_label(signal.concept)
+        if label not in gaps:
+            gaps.append(label)
+    return gaps
 
 
 def _build_highlights(text: str, job_text: str, start_id: int, doc_name: str) -> list[Highlight]:
@@ -689,6 +732,66 @@ def _build_highlights(text: str, job_text: str, start_id: int, doc_name: str) ->
         if focus and len(words) >= 8 and not any(item in segment_labels for item in focus):
             highlights.append(Highlight(start_id + len(highlights), segment, f"{doc_name} point is not aligned tightly enough to the advert.", f"Tie this point more directly to {', '.join(focus[:2])}."))
     return highlights
+
+
+def _build_tailored_advice(
+    job_text: str,
+    cv_text: str,
+    cover_text: str,
+    cv_highlights: list[Highlight],
+    cover_highlights: list[Highlight],
+) -> list[TailoredAdvice]:
+    focus = _high_priority_missing(job_text, cv_text, cover_text, limit=4)
+    advice: list[TailoredAdvice] = []
+
+    for highlight in cv_highlights[:2]:
+        advice.append(
+            TailoredAdvice(
+                source="cv",
+                reason=highlight.reason,
+                excerpt=highlight.excerpt,
+                suggestion=highlight.suggestion,
+                target_requirements=focus[:2],
+            )
+        )
+    for highlight in cover_highlights[:2]:
+        advice.append(
+            TailoredAdvice(
+                source="cover_letter",
+                reason=highlight.reason,
+                excerpt=highlight.excerpt,
+                suggestion=highlight.suggestion,
+                target_requirements=focus[:2],
+            )
+        )
+
+    if advice:
+        return advice[:4]
+
+    if focus:
+        cv_segment = next((segment for segment in _split_segments(cv_text) if len(segment.split()) >= 6), "")
+        if cv_segment:
+            advice.append(
+                TailoredAdvice(
+                    source="cv",
+                    reason="The CV needs clearer evidence for the target role.",
+                    excerpt=cv_segment,
+                    suggestion=f"Add explicit evidence for {', '.join(focus[:2])} with the tool used, what you owned, and the result.",
+                    target_requirements=focus[:2],
+                )
+            )
+        cover_segment = next((segment for segment in _split_segments(cover_text) if len(segment.split()) >= 6), "")
+        if cover_segment:
+            advice.append(
+                TailoredAdvice(
+                    source="cover_letter",
+                    reason="The cover letter should connect your evidence to the advert more directly.",
+                    excerpt=cover_segment,
+                    suggestion=f"State how your projects or placements map to {', '.join(focus[:2])}, and give one concrete example.",
+                    target_requirements=focus[:2],
+                )
+            )
+    return advice[:4]
 
 def recommend_roles(cv_text: str, jobs: list[dict[str, object]], limit: int = 5) -> list[RoleSuggestion]:
     evidence = _candidate_profile(cv_text, "")
@@ -770,6 +873,19 @@ def review(job_text: str, cv_text: str, cover_text: str) -> ReviewResult:
     structure = _score_structure(cv_text, cover_text)
     clarity = _score_clarity([cv_text, cover_text])
     total_cap, relevance_cap, fit_notes = _fit_caps(job_text, cv_text, cover_text)
+    cover_only_gaps = _cover_only_requirement_gaps(job_text, cv_text, cover_text)
+
+    if len(cover_only_gaps) >= 3:
+        relevance = max(8, relevance - 12)
+        total_cap = min(total_cap, 55)
+        fit_notes.append(
+            f"The cover letter names {', '.join(cover_only_gaps[:3])}, but the CV does not evidence them strongly enough yet."
+        )
+    elif len(cover_only_gaps) >= 2:
+        relevance = max(8, relevance - 7)
+        fit_notes.append(
+            f"Some of the strongest claims sit in the cover letter rather than the CV: {', '.join(cover_only_gaps[:2])}."
+        )
 
     relevance = min(relevance, relevance_cap)
     total = int(round(relevance * 0.4 + tailoring * 0.18 + specificity * 0.18 + structure * 0.12 + clarity * 0.12))
@@ -790,6 +906,7 @@ def review(job_text: str, cv_text: str, cover_text: str) -> ReviewResult:
 
     cv_highlights = _build_highlights(cv_text, job_text, 1, "CV")
     cover_highlights = _build_highlights(cover_text, job_text, 101, "Cover letter")
+    tailored_advice = _build_tailored_advice(job_text, cv_text, cover_text, cv_highlights, cover_highlights)
 
     return ReviewResult(
         score=ReviewScore(total=total, relevance=relevance, tailoring=tailoring, specificity=specificity, structure=structure, clarity=clarity),
@@ -798,6 +915,7 @@ def review(job_text: str, cv_text: str, cover_text: str) -> ReviewResult:
         missing_keywords=missing,
         cv_highlights=cv_highlights,
         cover_highlights=cover_highlights,
+        tailored_advice=tailored_advice,
         categories=categories,
     )
 
@@ -814,6 +932,7 @@ def to_json(result: ReviewResult) -> str:
         "missing_keywords": result.missing_keywords,
         "cv_highlights": [highlight.__dict__ for highlight in result.cv_highlights],
         "cover_highlights": [highlight.__dict__ for highlight in result.cover_highlights],
+        "tailored_advice": [advice.__dict__ for advice in result.tailored_advice],
         "categories": [category.__dict__ for category in result.categories],
     }
     return json.dumps(payload, indent=2, ensure_ascii=False)

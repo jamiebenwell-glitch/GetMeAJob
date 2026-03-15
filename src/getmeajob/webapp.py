@@ -16,6 +16,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from getmeajob.ingest import extract_job_text_from_url, extract_text_from_bytes
+from getmeajob.review_chat import answer_review_question
 from getmeajob.reviewer import recommend_roles, review
 from getmeajob.storage import (
     create_review_run,
@@ -216,6 +217,7 @@ def _empty_application(index: int = 1, latest_drafts: dict[str, dict[str, Any]] 
         "missing_keywords": [],
         "cv_highlights": [],
         "cover_highlights": [],
+        "tailored_advice": [],
         "cv_segments": [],
         "cover_segments": [],
         "categories": [],
@@ -423,6 +425,7 @@ def _review_application_from_history(review_run: dict[str, Any]) -> dict[str, An
     application["missing_keywords"] = list(application.get("missing_keywords") or [])
     application["cv_highlights"] = list(application.get("cv_highlights") or [])
     application["cover_highlights"] = list(application.get("cover_highlights") or [])
+    application["tailored_advice"] = list(application.get("tailored_advice") or [])
     application["categories"] = list(application.get("categories") or [])
     application["role_suggestions"] = list(application.get("role_suggestions") or [])
     application["cv_segments"] = list(application.get("cv_segments") or [])
@@ -575,6 +578,19 @@ async def save_draft_endpoint(request: Request) -> JSONResponse:
     return JSONResponse(saved)
 
 
+@app.post("/api/review-assistant", response_class=JSONResponse)
+async def review_assistant_endpoint(request: Request) -> JSONResponse:
+    payload = await request.json()
+    question = str(payload.get("question") or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Question is required.")
+    application = payload.get("application")
+    if not isinstance(application, dict):
+        raise HTTPException(status_code=400, detail="Application payload is required.")
+    answer = answer_review_question(application, question)
+    return JSONResponse({"answer": answer})
+
+
 @app.get("/api/drafts/{draft_id}/revisions", response_class=JSONResponse)
 def draft_revisions_endpoint(request: Request, draft_id: int, revision_id: int | None = None) -> JSONResponse:
     user = _current_user(request)
@@ -714,6 +730,7 @@ async def review_submit(request: Request) -> HTMLResponse:
         application["missing_keywords"] = result.missing_keywords
         application["cv_highlights"] = [highlight.__dict__ for highlight in result.cv_highlights]
         application["cover_highlights"] = [highlight.__dict__ for highlight in result.cover_highlights]
+        application["tailored_advice"] = [advice.__dict__ for advice in result.tailored_advice]
         application["cv_segments"] = _annotate_segments(cv_text, result.cv_highlights)
         application["cover_segments"] = _annotate_segments(cover_text, result.cover_highlights)
         application["categories"] = [category.__dict__ for category in result.categories]
@@ -742,6 +759,7 @@ async def review_submit(request: Request) -> HTMLResponse:
                 "missing_keywords": application["missing_keywords"],
                 "cv_highlights": application["cv_highlights"],
                 "cover_highlights": application["cover_highlights"],
+                "tailored_advice": application["tailored_advice"],
                 "cv_segments": application["cv_segments"],
                 "cover_segments": application["cover_segments"],
                 "categories": application["categories"],

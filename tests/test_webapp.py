@@ -84,6 +84,37 @@ def test_extract_upload_returns_text(client: TestClient) -> None:
     assert response.json()["text"].startswith("Mechanical engineering student")
 
 
+def test_review_assistant_endpoint_returns_grounded_answer(client: TestClient) -> None:
+    response = client.post(
+        "/api/review-assistant",
+        json={
+            "question": "What should I change in my cover letter?",
+            "application": {
+                "job": "Mechanical engineering placement at Acme. Need CAD, manufacturing, testing, and analysis.",
+                "cv_text": "Mechanical engineering student with CAD, prototype testing, and manufacturing project work. Improved setup time by 15%.",
+                "cover_text": "I am interested in this role and believe I would be a strong fit for the company and the position.",
+                "notes": ["Make the cover letter more role-specific by naming the company, the role, and the most relevant requirements."],
+                "missing_keywords": ["analysis"],
+                "keyword_overlap": ["cad", "testing", "manufacturing"],
+                "categories": [{"label": "Technical", "coverage": 52, "missing_keywords": ["analysis"]}],
+                "tailored_advice": [
+                    {
+                        "source": "cover_letter",
+                        "reason": "Cover letter point is too generic.",
+                        "excerpt": "I am interested in this role and believe I would be a strong fit for the company and the position.",
+                        "suggestion": "Replace this with a role-specific sentence tied to analysis and one concrete example.",
+                        "target_requirements": ["analysis"],
+                    }
+                ],
+                "role_suggestions": [],
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert "In your cover letter you wrote" in response.json()["answer"]
+
+
 def test_signed_in_user_can_save_drafts(client: TestClient) -> None:
     login = client.get("/test/login", follow_redirects=False)
     assert login.status_code == 303

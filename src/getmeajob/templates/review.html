@@ -388,31 +388,24 @@
                     </div>
                   </div>
                   <div class="tailored-advice-grid">
-                    {% for highlight in application.cv_highlights[:2] %}
+                    {% for advice in application.tailored_advice %}
                     <article class="tailored-advice-card">
                       <div class="tailored-advice-head">
-                        <span class="tailored-advice-source">From your CV</span>
-                        <strong>{{ highlight.reason }}</strong>
+                        <span class="tailored-advice-source{% if advice.source == 'cover_letter' %} cover{% endif %}">
+                          {% if advice.source == 'cover_letter' %}From your cover letter{% else %}From your CV{% endif %}
+                        </span>
+                        <strong>{{ advice.reason }}</strong>
                       </div>
                       <p class="tailored-advice-label">You wrote</p>
-                      <blockquote class="tailored-advice-quote">{{ highlight.excerpt }}</blockquote>
+                      <blockquote class="tailored-advice-quote">{{ advice.excerpt }}</blockquote>
                       <p class="tailored-advice-label">Try adding</p>
-                      <p class="tailored-advice-text">{{ highlight.suggestion }}</p>
+                      <p class="tailored-advice-text">{{ advice.suggestion }}</p>
+                      {% if advice.target_requirements %}
+                      <p class="tailored-advice-targets">Target this at {{ advice.target_requirements | join(', ') }}.</p>
+                      {% endif %}
                     </article>
                     {% endfor %}
-                    {% for highlight in application.cover_highlights[:2] %}
-                    <article class="tailored-advice-card">
-                      <div class="tailored-advice-head">
-                        <span class="tailored-advice-source cover">From your cover letter</span>
-                        <strong>{{ highlight.reason }}</strong>
-                      </div>
-                      <p class="tailored-advice-label">You wrote</p>
-                      <blockquote class="tailored-advice-quote">{{ highlight.excerpt }}</blockquote>
-                      <p class="tailored-advice-label">Try adding</p>
-                      <p class="tailored-advice-text">{{ highlight.suggestion }}</p>
-                    </article>
-                    {% endfor %}
-                    {% if not application.cv_highlights and not application.cover_highlights %}
+                    {% if not application.tailored_advice %}
                     <article class="tailored-advice-card tailored-advice-empty">
                       <strong>No specific wording fixes were flagged in this pass.</strong>
                       <p>Use the next improvements and requirement coverage sections to decide what to strengthen next.</p>

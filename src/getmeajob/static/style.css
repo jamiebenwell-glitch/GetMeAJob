@@ -1179,6 +1179,12 @@ button,
   line-height: 1.6;
 }
 
+.tailored-advice-targets {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .tailored-advice-empty {
   background: #fffdf7;
 }

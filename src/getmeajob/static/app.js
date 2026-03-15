@@ -513,11 +513,11 @@ function setupReviewPage() {
     writeState({ reviewSelectedResult: String(index) });
   }
 
-  function buildAssistantReply(result, question) {
+  function buildFallbackAssistantReply(result, question) {
     const lower = question.toLowerCase();
     const weakCategories = (result.categories || []).filter((category) => category.coverage < 60);
-    const firstCvIssue = (result.cv_highlights || [])[0];
-    const firstCoverIssue = (result.cover_highlights || [])[0];
+    const firstCvIssue = (result.tailored_advice || []).find((item) => item.source === "cv");
+    const firstCoverIssue = (result.tailored_advice || []).find((item) => item.source === "cover_letter");
     const firstSuggestion = (result.role_suggestions || [])[0];
 
     if (lower.includes("role") || lower.includes("job")) {
@@ -554,6 +554,19 @@ function setupReviewPage() {
       return `The main missing requirements are ${describeList(result.missing_keywords)}. The strongest matched terms are ${describeList(result.keyword_overlap)}.`;
     }
     return `Focus on ${describeList(result.missing_keywords)}, the next improvements list, and the tailored advice cards that quote your wording.`;
+  }
+
+  async function fetchAssistantReply(result, question) {
+    const response = await fetch("/api/review-assistant", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ application: result, question }),
+    });
+    if (!response.ok) {
+      throw new Error("Assistant reply failed.");
+    }
+    const payload = await response.json();
+    return String(payload.answer || "").trim();
   }
 
   function addChatMessage(role, text) {
@@ -962,7 +975,7 @@ function setupReviewPage() {
   });
 
   if (chatbotForm && chatbotQuestion) {
-    chatbotForm.addEventListener("submit", (event) => {
+    chatbotForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const question = chatbotQuestion.value.trim();
       if (!question) {
@@ -976,7 +989,26 @@ function setupReviewPage() {
         chatbotQuestion.value = "";
         return;
       }
-      addChatMessage("bot", buildAssistantReply(result, question));
+      addChatMessage("bot", "Thinking through your CV, cover letter, and the role...");
+      try {
+        const reply = await fetchAssistantReply(result, question);
+        const messages = chatbotMessages?.querySelectorAll(".chat-message.bot");
+        const placeholder = messages && messages.length > 0 ? messages[messages.length - 1] : null;
+        if (placeholder) {
+          placeholder.textContent = reply || buildFallbackAssistantReply(result, question);
+        } else {
+          addChatMessage("bot", reply || buildFallbackAssistantReply(result, question));
+        }
+      } catch (error) {
+        const fallback = buildFallbackAssistantReply(result, question);
+        const messages = chatbotMessages?.querySelectorAll(".chat-message.bot");
+        const placeholder = messages && messages.length > 0 ? messages[messages.length - 1] : null;
+        if (placeholder && placeholder.textContent === "Thinking through your CV, cover letter, and the role...") {
+          placeholder.textContent = fallback;
+        } else {
+          addChatMessage("bot", fallback);
+        }
+      }
       chatbotQuestion.value = "";
     });
   }
