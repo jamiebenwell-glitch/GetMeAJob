@@ -11,12 +11,66 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR.parent.parent / "data"
 DB_PATH = Path(os.getenv("GETMEAJOB_DB_PATH", str(DATA_DIR / "app.db")))
 
+REQUIRED_COLUMNS: dict[str, dict[str, str]] = {
+    "users": {
+        "google_sub": "TEXT NOT NULL DEFAULT ''",
+        "email": "TEXT NOT NULL DEFAULT ''",
+        "name": "TEXT NOT NULL DEFAULT ''",
+        "picture": "TEXT NOT NULL DEFAULT ''",
+        "created_at": "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+        "updated_at": "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+    },
+    "document_drafts": {
+        "user_id": "INTEGER NOT NULL DEFAULT 0",
+        "kind": "TEXT NOT NULL DEFAULT ''",
+        "title": "TEXT NOT NULL DEFAULT ''",
+        "content": "TEXT NOT NULL DEFAULT ''",
+        "created_at": "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+        "updated_at": "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+    },
+    "document_revisions": {
+        "draft_id": "INTEGER NOT NULL DEFAULT 0",
+        "content": "TEXT NOT NULL DEFAULT ''",
+        "created_at": "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+    },
+    "review_runs": {
+        "user_id": "INTEGER NOT NULL DEFAULT 0",
+        "job_title": "TEXT NOT NULL DEFAULT ''",
+        "job_url": "TEXT NOT NULL DEFAULT ''",
+        "score_total": "INTEGER NOT NULL DEFAULT 0",
+        "score_relevance": "INTEGER NOT NULL DEFAULT 0",
+        "score_tailoring": "INTEGER NOT NULL DEFAULT 0",
+        "score_specificity": "INTEGER NOT NULL DEFAULT 0",
+        "score_structure": "INTEGER NOT NULL DEFAULT 0",
+        "score_clarity": "INTEGER NOT NULL DEFAULT 0",
+        "cv_draft_id": "INTEGER",
+        "cover_draft_id": "INTEGER",
+        "cv_title": "TEXT NOT NULL DEFAULT ''",
+        "cover_title": "TEXT NOT NULL DEFAULT ''",
+        "created_at": "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+    },
+}
+
 
 def _connection() -> sqlite3.Connection:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
     return connection
+
+
+def _table_columns(connection: sqlite3.Connection, table_name: str) -> set[str]:
+    rows = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+    return {str(row["name"]) for row in rows}
+
+
+def _ensure_required_columns(connection: sqlite3.Connection) -> None:
+    for table_name, columns in REQUIRED_COLUMNS.items():
+        existing = _table_columns(connection, table_name)
+        for column_name, column_sql in columns.items():
+            if column_name in existing:
+                continue
+            connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql}")
 
 
 def init_db() -> None:
@@ -74,6 +128,7 @@ def init_db() -> None:
             );
             """
         )
+        _ensure_required_columns(connection)
 
 
 def _row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:

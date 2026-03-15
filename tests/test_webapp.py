@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import sqlite3
 import tempfile
 from pathlib import Path
 
@@ -105,6 +106,79 @@ def test_signed_in_user_can_save_drafts(client: TestClient) -> None:
     assert "Main CV" in page.text
     assert "Use draft" in page.text
     assert "Compare changes" in page.text
+
+
+def test_existing_database_schema_is_migrated_for_login_and_review(tmp_path: Path) -> None:
+    storage.DB_PATH = tmp_path / "legacy.db"
+    with sqlite3.connect(storage.DB_PATH) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                google_sub TEXT NOT NULL UNIQUE,
+                email TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE document_drafts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                kind TEXT NOT NULL,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE document_revisions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                draft_id INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE review_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                job_title TEXT NOT NULL,
+                job_url TEXT NOT NULL DEFAULT '',
+                score_total INTEGER NOT NULL,
+                score_relevance INTEGER NOT NULL,
+                score_tailoring INTEGER NOT NULL,
+                score_specificity INTEGER NOT NULL,
+                score_structure INTEGER NOT NULL,
+                score_clarity INTEGER NOT NULL,
+                cv_draft_id INTEGER,
+                cover_draft_id INTEGER,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+
+    app.state.testing = True
+    with TestClient(app) as legacy_client:
+        login = legacy_client.get("/test/login", follow_redirects=False)
+        assert login.status_code == 303
+
+        response = legacy_client.post(
+            "/review",
+            data={
+                "job": "Mechanical Design Engineer. Must have CAD, testing, manufacturing, and analysis experience.",
+                "job_url": "",
+                "cv_text": "Mechanical engineering student with CAD, testing, manufacturing, and design project work.",
+                "cover_text": "I want this design role because it matches my CAD and manufacturing project experience.",
+                "cv_draft_title": "Main CV",
+                "cover_draft_title": "Main Cover Letter",
+                "cv_draft_id": "",
+                "cover_draft_id": "",
+            },
+        )
+
+        assert response.status_code == 200
+        assert "Review complete." in response.text
+        assert "Main CV against" in response.text
 
 
 def test_signed_in_user_can_fetch_revision_diff(client: TestClient) -> None:
