@@ -242,6 +242,9 @@
               <strong>{{ item.job_title }}</strong>
               <span>{{ item.created_at }}</span>
               <p>{{ item.cv_title }} / {{ item.cover_title }}</p>
+              <div class="history-actions">
+                <a class="secondary history-open" href="/review/history/{{ item.id }}">Open review</a>
+              </div>
             </div>
           </article>
           {% endfor %}

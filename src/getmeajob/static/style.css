@@ -718,6 +718,16 @@ button,
   margin-bottom: 4px;
 }
 
+.history-actions {
+  margin-top: 10px;
+}
+
+.history-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .history-score {
   display: inline-flex;
   min-width: 68px;

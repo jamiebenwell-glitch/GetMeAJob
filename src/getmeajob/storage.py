@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from pathlib import Path
+import json
 import os
 import sqlite3
 from typing import Any
@@ -47,6 +48,7 @@ REQUIRED_COLUMNS: dict[str, dict[str, str]] = {
         "cover_draft_id": "INTEGER",
         "cv_title": "TEXT NOT NULL DEFAULT ''",
         "cover_title": "TEXT NOT NULL DEFAULT ''",
+        "application_payload": "TEXT NOT NULL DEFAULT ''",
         "created_at": "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
     },
 }
@@ -278,6 +280,7 @@ def create_review_run(
     cover_draft_id: int | None,
     cv_title: str,
     cover_title: str,
+    application_payload: dict[str, Any],
 ) -> dict[str, Any]:
     with _connection() as connection:
         cursor = connection.execute(
@@ -295,9 +298,10 @@ def create_review_run(
                 cv_draft_id,
                 cover_draft_id,
                 cv_title,
-                cover_title
+                cover_title,
+                application_payload
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 user_id,
@@ -313,10 +317,35 @@ def create_review_run(
                 cover_draft_id,
                 cv_title.strip(),
                 cover_title.strip(),
+                json.dumps(application_payload),
             ),
         )
         row = connection.execute("SELECT * FROM review_runs WHERE id = ?", (cursor.lastrowid,)).fetchone()
     return _row_to_dict(row) or {}
+
+
+def get_review_run(user_id: int, review_id: int) -> dict[str, Any] | None:
+    with _connection() as connection:
+        row = connection.execute(
+            """
+            SELECT *
+            FROM review_runs
+            WHERE id = ? AND user_id = ?
+            """,
+            (review_id, user_id),
+        ).fetchone()
+    review_run = _row_to_dict(row)
+    if review_run is None:
+        return None
+    payload_text = str(review_run.get("application_payload") or "").strip()
+    if payload_text:
+        try:
+            review_run["application_payload"] = json.loads(payload_text)
+        except json.JSONDecodeError:
+            review_run["application_payload"] = None
+    else:
+        review_run["application_payload"] = None
+    return review_run
 
 
 def list_review_history(user_id: int, limit: int = 20) -> list[dict[str, Any]]:

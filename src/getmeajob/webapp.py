@@ -20,6 +20,7 @@ from getmeajob.reviewer import recommend_roles, review
 from getmeajob.storage import (
     create_review_run,
     get_draft,
+    get_review_run,
     get_revision,
     get_user,
     group_drafts,
@@ -380,6 +381,25 @@ def _review_page_context(
     return context
 
 
+def _review_application_from_history(review_run: dict[str, Any]) -> dict[str, Any]:
+    application = _empty_application(1)
+    payload = review_run.get("application_payload")
+    if isinstance(payload, dict):
+        application.update(payload)
+    application["index"] = 1
+    application["errors"] = list(application.get("errors") or [])
+    application["notes"] = list(application.get("notes") or [])
+    application["keyword_overlap"] = list(application.get("keyword_overlap") or [])
+    application["missing_keywords"] = list(application.get("missing_keywords") or [])
+    application["cv_highlights"] = list(application.get("cv_highlights") or [])
+    application["cover_highlights"] = list(application.get("cover_highlights") or [])
+    application["categories"] = list(application.get("categories") or [])
+    application["role_suggestions"] = list(application.get("role_suggestions") or [])
+    application["cv_segments"] = list(application.get("cv_segments") or [])
+    application["cover_segments"] = list(application.get("cover_segments") or [])
+    return application
+
+
 @app.get("/", response_class=HTMLResponse)
 def index() -> RedirectResponse:
     return RedirectResponse(url="/jobs", status_code=303)
@@ -403,6 +423,22 @@ def review_page(request: Request) -> HTMLResponse:
         request,
         "review.html",
         _review_page_context(request, applications, False),
+    )
+
+
+@app.get("/review/history/{review_id}", response_class=HTMLResponse)
+def review_history_page(request: Request, review_id: int) -> HTMLResponse:
+    user = _current_user(request)
+    if user is None:
+        return RedirectResponse(url="/auth/login/google?next=/review", status_code=303)
+    review_run = get_review_run(int(user["id"]), review_id)
+    if review_run is None:
+        raise HTTPException(status_code=404, detail="Saved review not found.")
+    applications = [_review_application_from_history(review_run)]
+    return templates.TemplateResponse(
+        request,
+        "review.html",
+        _review_page_context(request, applications, True),
     )
 
 
@@ -653,6 +689,30 @@ async def review_submit(request: Request) -> HTMLResponse:
         application["role_suggestions"] = [suggestion.__dict__ for suggestion in role_suggestions]
 
         if user:
+            saved_application = {
+                "index": 1,
+                "job": job_text,
+                "job_url": job_url,
+                "cv_text": cv_text,
+                "cover_text": cover_text,
+                "cv_draft_id": application["cv_draft_id"],
+                "cover_draft_id": application["cover_draft_id"],
+                "cv_draft_title": application["cv_draft_title"],
+                "cover_draft_title": application["cover_draft_title"],
+                "cv_file_name": application["cv_file_name"],
+                "cover_letter_file_name": application["cover_letter_file_name"],
+                "errors": [],
+                "score": application["score"],
+                "notes": application["notes"],
+                "keyword_overlap": application["keyword_overlap"],
+                "missing_keywords": application["missing_keywords"],
+                "cv_highlights": application["cv_highlights"],
+                "cover_highlights": application["cover_highlights"],
+                "cv_segments": application["cv_segments"],
+                "cover_segments": application["cover_segments"],
+                "categories": application["categories"],
+                "role_suggestions": application["role_suggestions"],
+            }
             create_review_run(
                 int(user["id"]),
                 job_title=_job_title(job_text, job_url),
@@ -662,6 +722,7 @@ async def review_submit(request: Request) -> HTMLResponse:
                 cover_draft_id=int(saved_cover["id"]) if saved_cover else None,
                 cv_title=str(saved_cv["title"]) if saved_cv else cv_draft_title,
                 cover_title=str(saved_cover["title"]) if saved_cover else cover_draft_title,
+                application_payload=saved_application,
             )
 
         applications.append(application)

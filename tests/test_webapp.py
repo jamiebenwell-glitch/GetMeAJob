@@ -283,6 +283,33 @@ def test_review_submission_saves_history_for_signed_in_user(client: TestClient) 
     review_page = client.get("/review")
     assert review_page.status_code == 200
     assert "Mechanical engineering placement at Acme" in review_page.text
+    assert "Open review" in review_page.text
+
+
+def test_signed_in_user_can_reopen_saved_review(client: TestClient) -> None:
+    client.get("/test/login", follow_redirects=False)
+
+    response = client.post(
+        "/review",
+        data={
+            "job": "Mechanical engineering placement at Acme. Need CAD, manufacturing, testing, and analysis.",
+            "job_url": "",
+            "cv_text": "Mechanical engineering student with CAD, prototype testing, and manufacturing project work. Improved setup time by 15%.",
+            "cover_text": "I want to join Acme for this placement and can support CAD, testing, and manufacturing delivery.",
+            "cv_draft_title": "Main CV",
+            "cover_draft_title": "Main Cover Letter",
+            "cv_draft_id": "",
+            "cover_draft_id": "",
+        },
+    )
+    assert response.status_code == 200
+
+    history_page = client.get("/review/history/1")
+    assert history_page.status_code == 200
+    assert "Review complete." in history_page.text
+    assert "Scored applications" in history_page.text
+    assert "Mechanical engineering placement at Acme" in history_page.text
+    assert "Main CV against" in history_page.text
 
 
 def test_review_submission_keeps_strong_fit_above_pass_threshold(client: TestClient) -> None:

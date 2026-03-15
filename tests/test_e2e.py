@@ -176,6 +176,13 @@ def test_browser_review_results_and_history() -> None:
         page.wait_for_selector("text=Score trend")
         assert page.locator("#history-chart svg").is_visible()
         assert page.locator(".history-item").count() >= 1
+        page.reload(wait_until="networkidle")
+        page.get_by_role("link", name="Open review").first.click()
+        page.wait_for_selector("text=Scored applications")
+        assert page.locator(".score").first.text_content().strip().endswith("%")
+        assert review.first_set().get_by_label("Paste CV text").input_value().startswith(
+            "Mechanical engineering student with CAD"
+        )
         browser.close()
 
 
