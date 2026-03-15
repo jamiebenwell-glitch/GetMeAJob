@@ -195,6 +195,8 @@ def test_review_submission_saves_history_for_signed_in_user(client: TestClient) 
     assert "Score trend" in response.text
     assert "Main Cover Letter" in response.text
     assert 'id="history-chart"' in response.text
+    assert "What to change" in response.text
+    assert 'class="issue-card"' in response.text
 
     review_page = client.get("/review")
     assert review_page.status_code == 200

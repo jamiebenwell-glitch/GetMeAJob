@@ -27,11 +27,12 @@ def _wait_for_server(url: str, timeout_seconds: int = 40) -> None:
     end = time.time() + timeout_seconds
     while time.time() < end:
         try:
-            response = httpx.get(url, timeout=2.0)
+            response = httpx.get(url, timeout=2.0, trust_env=False)
             if response.status_code == 200:
                 return
         except Exception:
-            time.sleep(0.25)
+            pass
+        time.sleep(0.25)
     raise RuntimeError(f"Server did not become ready at {url}")
 
 
@@ -104,3 +105,9 @@ class ReviewerPage:
 
     def sign_in_test_user(self, base_url: str) -> None:
         self.goto(f"{base_url}/test/login?next=/review")
+
+    def open_results_tab(self) -> None:
+        self.page.locator('[data-tab-trigger="results"]').click()
+
+    def open_reviewer_tab(self) -> None:
+        self.page.locator('[data-tab-trigger="reviewer"]').click()

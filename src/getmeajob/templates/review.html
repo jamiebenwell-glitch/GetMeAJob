@@ -423,35 +423,57 @@
 
                 <section class="markup-stack">
                   <article class="markup-card">
-                    <h4>CV markup</h4>
-                    {% for segment in application.cv_segments %}
-                    <div class="annotated-segment{% if segment.highlight %} issue{% endif %}">
-                      {% if segment.highlight %}<span class="issue-badge">{{ segment.highlight.issue_id }}</span>{% endif %}
+                    <div class="markup-card-head">
                       <div>
-                        <div class="segment-text{% if segment.highlight %} issue-mark{% endif %}">{{ segment.text }}</div>
-                        {% if segment.highlight %}
-                        <span class="issue-reason">{{ segment.highlight.reason }}</span>
-                        <span class="issue-suggestion">{{ segment.highlight.suggestion }}</span>
-                        {% endif %}
+                        <h4>CV markup</h4>
+                        <p class="markup-intro">Only the problem areas are shown, the way a hiring manager would flag them for revision.</p>
                       </div>
+                      <span class="markup-count">{{ application.cv_highlights | length }} flagged</span>
                     </div>
-                    {% endfor %}
+                    {% if application.cv_highlights %}
+                      {% for highlight in application.cv_highlights %}
+                      <article class="issue-card" data-issue-id="{{ highlight.issue_id }}">
+                        <div class="issue-card-head">
+                          <span class="issue-badge">{{ highlight.issue_id }}</span>
+                          <strong>{{ highlight.reason }}</strong>
+                        </div>
+                        <blockquote class="issue-excerpt">{{ highlight.excerpt }}</blockquote>
+                        <div class="issue-action">
+                          <span class="issue-action-label">What to change</span>
+                          <p class="issue-suggestion">{{ highlight.suggestion }}</p>
+                        </div>
+                      </article>
+                      {% endfor %}
+                    {% else %}
+                      <div class="markup-empty">No major CV issues were flagged in the current pass.</div>
+                    {% endif %}
                   </article>
 
                   <article class="markup-card">
-                    <h4>Cover letter markup</h4>
-                    {% for segment in application.cover_segments %}
-                    <div class="annotated-segment{% if segment.highlight %} issue{% endif %}">
-                      {% if segment.highlight %}<span class="issue-badge">{{ segment.highlight.issue_id }}</span>{% endif %}
+                    <div class="markup-card-head">
                       <div>
-                        <div class="segment-text{% if segment.highlight %} issue-mark{% endif %}">{{ segment.text }}</div>
-                        {% if segment.highlight %}
-                        <span class="issue-reason">{{ segment.highlight.reason }}</span>
-                        <span class="issue-suggestion">{{ segment.highlight.suggestion }}</span>
-                        {% endif %}
+                        <h4>Cover letter markup</h4>
+                        <p class="markup-intro">Each flagged item isolates the weak passage and gives one direct correction.</p>
                       </div>
+                      <span class="markup-count">{{ application.cover_highlights | length }} flagged</span>
                     </div>
-                    {% endfor %}
+                    {% if application.cover_highlights %}
+                      {% for highlight in application.cover_highlights %}
+                      <article class="issue-card" data-issue-id="{{ highlight.issue_id }}">
+                        <div class="issue-card-head">
+                          <span class="issue-badge">{{ highlight.issue_id }}</span>
+                          <strong>{{ highlight.reason }}</strong>
+                        </div>
+                        <blockquote class="issue-excerpt">{{ highlight.excerpt }}</blockquote>
+                        <div class="issue-action">
+                          <span class="issue-action-label">What to change</span>
+                          <p class="issue-suggestion">{{ highlight.suggestion }}</p>
+                        </div>
+                      </article>
+                      {% endfor %}
+                    {% else %}
+                      <div class="markup-empty">No major cover letter issues were flagged in the current pass.</div>
+                    {% endif %}
                   </article>
                 </section>
               </div>
