@@ -90,9 +90,35 @@ def test_recommend_roles_penalizes_senior_roles_for_student_cv() -> None:
 
     assert suggestions
     assert suggestions[0].title == "Graduate Software Engineer"
-    senior = next(item for item in suggestions if item.title == "Senior Software Engineer")
-    graduate = next(item for item in suggestions if item.title == "Graduate Software Engineer")
-    assert senior.score < graduate.score
+    assert all(item.title != "Senior Software Engineer" for item in suggestions)
+
+
+def test_recommend_roles_boosts_early_career_roles_for_student_cv() -> None:
+    suggestions = recommend_roles(
+        "Mechanical engineering undergraduate with CAD, testing, manufacturing, and prototype project work.",
+        [
+            {
+                "title": "Mechanical Engineering Placement",
+                "company": "Acme",
+                "location": "Bristol, United Kingdom",
+                "summary": "Placement role focused on CAD design, testing, and manufacturing support.",
+                "key_requirements": ["CAD", "testing", "manufacturing", "analysis"],
+                "apply_url": "https://example.com/placement",
+            },
+            {
+                "title": "Mechanical Engineer",
+                "company": "MidCo",
+                "location": "Coventry, United Kingdom",
+                "summary": "Mechanical engineering role focused on CAD, testing, and manufacturing support.",
+                "key_requirements": ["CAD", "testing", "manufacturing"],
+                "apply_url": "https://example.com/mid",
+            },
+        ],
+    )
+
+    assert suggestions
+    assert suggestions[0].title == "Mechanical Engineering Placement"
+    assert suggestions[0].score > suggestions[1].score
 
 
 def test_reviewer_gives_partial_credit_for_close_requirement_matches() -> None:

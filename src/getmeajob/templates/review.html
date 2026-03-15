@@ -432,64 +432,6 @@
                   </div>
                 </section>
               </div>
-
-              <div class="results-side-column">
-                <section class="markup-stack">
-                  <article class="markup-card">
-                    <div class="markup-card-head">
-                      <div>
-                        <h4>CV markup</h4>
-                        <p class="markup-intro">These are the exact weak spots to rewrite first.</p>
-                      </div>
-                      <span class="markup-count">{{ application.cv_highlights | length }} flagged</span>
-                    </div>
-                    {% if application.cv_highlights %}
-                      {% for highlight in application.cv_highlights %}
-                      <article class="issue-card" data-issue-id="{{ highlight.issue_id }}">
-                        <div class="issue-card-head">
-                          <span class="issue-badge">{{ highlight.issue_id }}</span>
-                          <strong>{{ highlight.reason }}</strong>
-                        </div>
-                        <blockquote class="issue-excerpt">{{ highlight.excerpt }}</blockquote>
-                        <div class="issue-action">
-                          <span class="issue-action-label">What to change</span>
-                          <p class="issue-suggestion">{{ highlight.suggestion }}</p>
-                        </div>
-                      </article>
-                      {% endfor %}
-                    {% else %}
-                      <div class="markup-empty">No major CV issues were flagged in the current pass.</div>
-                    {% endif %}
-                  </article>
-
-                  <article class="markup-card">
-                    <div class="markup-card-head">
-                      <div>
-                        <h4>Cover letter markup</h4>
-                        <p class="markup-intro">Each flag isolates the weak passage and gives one direct fix.</p>
-                      </div>
-                      <span class="markup-count">{{ application.cover_highlights | length }} flagged</span>
-                    </div>
-                    {% if application.cover_highlights %}
-                      {% for highlight in application.cover_highlights %}
-                      <article class="issue-card" data-issue-id="{{ highlight.issue_id }}">
-                        <div class="issue-card-head">
-                          <span class="issue-badge">{{ highlight.issue_id }}</span>
-                          <strong>{{ highlight.reason }}</strong>
-                        </div>
-                        <blockquote class="issue-excerpt">{{ highlight.excerpt }}</blockquote>
-                        <div class="issue-action">
-                          <span class="issue-action-label">What to change</span>
-                          <p class="issue-suggestion">{{ highlight.suggestion }}</p>
-                        </div>
-                      </article>
-                      {% endfor %}
-                    {% else %}
-                      <div class="markup-empty">No major cover letter issues were flagged in the current pass.</div>
-                    {% endif %}
-                  </article>
-                </section>
-              </div>
             </div>
           </article>
           {% endfor %}

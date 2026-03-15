@@ -56,6 +56,11 @@ EARLY_STAGE_PATTERNS = (
     "industrial placement", "graduate scheme", "final year",
 )
 
+EARLY_ROLE_PATTERNS = (
+    "undergraduate", "student", "intern", "internship", "placement", "year in industry",
+    "industrial placement", "graduate", "graduate scheme", "entry level", "junior", "apprentice",
+)
+
 CATEGORY_HINTS: dict[str, set[str]] = {
     "technical": {"analysis", "api", "backend", "cad", "cfd", "cloud", "controls", "design", "embedded", "engineering", "fem", "firmware", "frontend", "matlab", "modelling", "python", "react", "simulation", "software", "solidworks", "testing"},
     "manufacturing": {"assembly", "factory", "lean", "machining", "manufacturing", "production", "process", "prototype", "quality", "safety", "tooling", "validation"},
@@ -311,6 +316,11 @@ def _detect_candidate_seniority(cv_text: str, cover_text: str) -> int:
     if years >= 1:
         return 1
     return 0
+
+
+def _is_early_career_role(job_text: str) -> bool:
+    normalized = f" {_normalize_text(job_text)} "
+    return any(pattern in normalized for pattern in EARLY_ROLE_PATTERNS)
 
 
 def _role_family_scores(text: str) -> dict[str, int]:
@@ -686,10 +696,20 @@ def recommend_roles(cv_text: str, jobs: list[dict[str, object]], limit: int = 5)
         return []
 
     ranked: list[tuple[int, RoleSuggestion]] = []
+    candidate_level = _detect_candidate_seniority(cv_text, "")
     for job in jobs:
         text = _job_text(job)
         requirements = _build_requirement_map(text)
         if not requirements:
+            continue
+
+        job_level = _detect_job_seniority(text)
+        required_years = _extract_years_of_experience(text)
+        early_career_role = _is_early_career_role(text)
+
+        if candidate_level <= -1 and (job_level >= 2 or required_years >= 3):
+            continue
+        if candidate_level <= 0 and (job_level >= 3 or required_years >= 5):
             continue
 
         total_weight = sum(signal.weight for signal in requirements.values())
@@ -710,6 +730,14 @@ def recommend_roles(cv_text: str, jobs: list[dict[str, object]], limit: int = 5)
             score = min(score, 18)
         elif total_cap >= 80:
             score = max(score, 24)
+
+        if candidate_level <= 0:
+            if early_career_role:
+                score += 12
+            elif job_level >= 1:
+                score = min(score - 8, 42)
+        elif candidate_level == 1 and early_career_role:
+            score += 6
 
         suggestion = RoleSuggestion(
             title=str(job.get("title") or "Untitled role"),

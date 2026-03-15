@@ -154,21 +154,11 @@ def test_browser_review_results_and_history() -> None:
         review.wait_for_results()
         assert page.locator('[data-tab-trigger="results"]').get_attribute("aria-selected") == "true"
         assert page.locator(".result-overview-grid").is_visible()
-        assert page.locator(".results-side-column .markup-card").count() >= 2
+        assert page.locator("text=CV markup").count() == 0
+        assert page.locator(".issue-card").count() == 0
         assert int(page.locator(".score").first.text_content().strip().rstrip("%")) >= 60
         page.wait_for_selector("text=Roles that fit this CV")
-        page.wait_for_selector(".issue-card")
-        assert page.locator(".issue-card").count() >= 2
-        assert page.locator(".issue-action-label").first.text_content() == "What to change"
-        issue_card_box = page.locator(".issue-card").first.bounding_box()
-        workspace_box = page.locator(".workspace-panel").bounding_box()
-        assert issue_card_box is not None and workspace_box is not None
-        assert issue_card_box["x"] >= workspace_box["x"]
-        assert issue_card_box["x"] + issue_card_box["width"] <= workspace_box["x"] + workspace_box["width"] + 2
-        red_color = page.locator(".issue-suggestion").first.evaluate(
-            "(el) => window.getComputedStyle(el).color"
-        )
-        assert red_color in {"rgb(180, 35, 24)", "rgb(180, 35, 24)"}
+        assert page.locator(".suggestion-card").count() >= 1
         page.get_by_label("Question").fill("What should I change first?")
         page.get_by_role("button", name="Ask").click()
         page.wait_for_selector("text=Start with")
@@ -219,7 +209,7 @@ def test_browser_split_page_layout_desktop_and_mobile() -> None:
         browser.close()
 
 
-def test_browser_markup_cards_stay_readable_on_mobile() -> None:
+def test_browser_results_layout_stays_readable_on_mobile() -> None:
     with run_server() as base_url, sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         page = browser.new_page(viewport={"width": 390, "height": 1200})
@@ -233,12 +223,13 @@ def test_browser_markup_cards_stay_readable_on_mobile() -> None:
         review.submit_review()
         review.wait_for_results()
 
-        page.wait_for_selector(".issue-card")
+        page.wait_for_selector("text=Roles that fit this CV")
         mobile_overflow = page.evaluate("() => document.documentElement.scrollWidth - window.innerWidth")
         assert mobile_overflow <= 2
-        first_issue = page.locator(".issue-card").first.bounding_box()
-        assert first_issue is not None
-        assert first_issue["width"] <= 390
+        assert page.locator(".issue-card").count() == 0
+        first_suggestion = page.locator(".suggestion-card").first.bounding_box()
+        assert first_suggestion is not None
+        assert first_suggestion["width"] <= 390
         browser.close()
 
 

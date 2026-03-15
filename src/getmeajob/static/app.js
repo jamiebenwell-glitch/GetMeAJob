@@ -531,18 +531,18 @@ function setupReviewPage() {
         return `Start with ${weakCategories[0].label.toLowerCase()}. Missing evidence there includes ${describeList(weakCategories[0].missing_keywords)}.`;
       }
       if (firstCvIssue) {
-        return `Start with CV marker ${firstCvIssue.issue_id}. ${firstCvIssue.suggestion}`;
+        return `Start with this CV change first: ${firstCvIssue.suggestion}`;
       }
     }
     if (lower.includes("cover")) {
       if (firstCoverIssue) {
-        return `The cover letter issue to fix first is marker ${firstCoverIssue.issue_id}. ${firstCoverIssue.suggestion}`;
+        return `The cover letter change to make first is: ${firstCoverIssue.suggestion}`;
       }
       return "The cover letter is mainly being scored on tailoring, clarity, and proof of impact.";
     }
     if (lower.includes("cv")) {
       if (firstCvIssue) {
-        return `The CV issue to fix first is marker ${firstCvIssue.issue_id}. ${firstCvIssue.suggestion}`;
+        return `The CV change to make first is: ${firstCvIssue.suggestion}`;
       }
       return `Your CV should show stronger evidence for ${describeList(result.missing_keywords)} with measurable outcomes.`;
     }
@@ -553,7 +553,7 @@ function setupReviewPage() {
     if (lower.includes("keyword") || lower.includes("requirement")) {
       return `The main missing requirements are ${describeList(result.missing_keywords)}. The strongest matched terms are ${describeList(result.keyword_overlap)}.`;
     }
-    return `Focus on ${describeList(result.missing_keywords)} and the red markers in the CV and cover letter sections.`;
+    return `Focus on ${describeList(result.missing_keywords)} and the next improvements list.`;
   }
 
   function addChatMessage(role, text) {
