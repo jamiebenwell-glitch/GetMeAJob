@@ -332,3 +332,24 @@ def test_browser_review_ignores_demographic_questionnaire_text() -> None:
         chat_text = (page.locator("#chatbot-messages").text_content() or "").lower()
         assert "disability" not in chat_text
         browser.close()
+
+
+def test_browser_review_trims_broad_title_requirement_labels() -> None:
+    with run_server() as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1200})
+        review = ReviewerPage(page)
+        review.goto(f"{base_url}/review")
+        review.fill_manual(
+            "Graduate Mechanical Engineer. Need CAD, manufacturing, testing, and analysis.",
+            "Mechanical engineering student with CAD, testing, manufacturing, and analysis project work. Improved fixture setup time by 15%.",
+            "I want this graduate role because it matches my CAD, testing, and manufacturing experience.",
+        )
+        review.submit_review()
+        review.wait_for_results()
+
+        requirement_labels = [text.lower() for text in page.locator(".requirement-card .requirement-head strong").all_inner_texts()]
+        assert "engineering" not in requirement_labels
+        assert "mechanical" not in requirement_labels
+        assert {"analysis", "cad", "manufacturing", "testing"} <= set(requirement_labels)
+        browser.close()

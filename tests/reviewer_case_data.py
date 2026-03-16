@@ -125,6 +125,16 @@ BASE_REVIEWER_CASES = [
         "must_include": ["cad", "testing"],
         "must_exclude": ["disability", "applicants", "employees", "ever"],
     },
+    {
+        "name": "broad_title_noise_is_trimmed",
+        "job": "Graduate Mechanical Engineer. Need CAD, manufacturing, testing, and analysis.",
+        "cv": "Mechanical engineering student with CAD, testing, manufacturing, and analysis project work. Improved fixture setup time by 15%.",
+        "cover": "I want this graduate role because it matches my CAD, testing, and manufacturing experience.",
+        "score_min": 62,
+        "score_max": 90,
+        "must_include": ["cad", "testing"],
+        "must_exclude_requirements": ["engineering", "mechanical"],
+    },
 ]
 
 

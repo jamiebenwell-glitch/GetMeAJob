@@ -151,6 +151,14 @@ TITLE_CONCEPT_BOOST = 1.2
 TITLE_TOKEN_BOOST = 0.9
 MIN_RELEVANCE_FLOOR = 18
 MATCH_DISPLAY_THRESHOLD = 0.05
+TITLE_ONLY_CONCEPT_SUPPORT: dict[str, set[str] | None] = {
+    "engineering": None,
+    "mechanical": {"analysis", "cad", "cfd", "design", "fem", "manufacturing", "modelling", "process", "prototype", "simulation", "testing", "tooling"},
+    "software": {"api", "automation", "backend", "cloud", "data", "distributed_systems", "frontend", "java", "machine_learning", "python", "react", "sql", "testing"},
+    "electrical": {"controls", "embedded", "firmware", "hardware", "plc", "quality", "testing"},
+    "data": {"communication", "data", "machine_learning", "python", "sql", "stakeholder"},
+    "civil": {"design", "project_management", "quality", "safety"},
+}
 
 
 @dataclass(frozen=True)
@@ -610,6 +618,20 @@ def _build_requirement_map(job_text: str) -> dict[str, RequirementSignal]:
         current = aggregated.get(signal.concept)
         if current is None or signal.weight > current.weight:
             aggregated[signal.concept] = signal
+    non_title_concepts = {concept for concept, signal in aggregated.items() if signal.priority != "title"}
+    if non_title_concepts:
+        aggregated = {
+            concept: signal
+            for concept, signal in aggregated.items()
+            if not (
+                signal.priority == "title"
+                and concept in TITLE_ONLY_CONCEPT_SUPPORT
+                and (
+                    TITLE_ONLY_CONCEPT_SUPPORT[concept] is None
+                    or bool(non_title_concepts & set(TITLE_ONLY_CONCEPT_SUPPORT[concept] or set()))
+                )
+            )
+        }
     return aggregated
 
 

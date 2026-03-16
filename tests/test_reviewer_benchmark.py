@@ -18,6 +18,10 @@ def test_reviewer_benchmark_cases(case: dict[str, object]) -> None:
         lowered = str(keyword).lower()
         assert lowered in [item.lower() for item in result.keyword_overlap]
 
+    requirement_names = [item.requirement.lower() for item in result.requirement_evidence]
+    for forbidden in case.get("must_exclude_requirements", []):
+        assert str(forbidden).lower() not in requirement_names
+
     required_note = str(case.get("must_note") or "").strip().lower()
     if required_note:
         notes = " ".join(result.notes).lower()

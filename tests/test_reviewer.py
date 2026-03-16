@@ -197,3 +197,20 @@ def test_reviewer_ignores_demographic_questionnaire_text() -> None:
     ).lower()
     assert all(term not in combined_guidance for term in blocked_terms)
     assert result.score.relevance >= 60
+
+
+def test_reviewer_drops_broad_title_labels_when_specific_requirements_exist() -> None:
+    result = review(
+        "Graduate Mechanical Engineer. Need CAD, manufacturing, testing, and analysis.",
+        "Mechanical engineering student with CAD, testing, manufacturing, and analysis project work. Improved fixture setup time by 15%.",
+        "I want this graduate role because it matches my CAD, testing, and manufacturing experience.",
+    )
+
+    requirements = {item.requirement.lower() for item in result.requirement_evidence}
+    assert "engineering" not in requirements
+    assert "mechanical" not in requirements
+    assert {"analysis", "cad", "manufacturing", "testing"} <= requirements
+
+    combined_keywords = {item.lower() for item in result.keyword_overlap + result.missing_keywords}
+    assert "engineering" not in combined_keywords
+    assert "mechanical" not in combined_keywords
