@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from getmeajob.reviewer import _is_sensitive_requirement_text
+from getmeajob.reviewer import _is_non_experiential_requirement_text
 
 
 def _normalize_items(values: list[Any] | None) -> list[str]:
@@ -11,7 +11,7 @@ def _normalize_items(values: list[Any] | None) -> list[str]:
     return [
         str(value).strip()
         for value in values
-        if str(value).strip() and not _is_sensitive_requirement_text(str(value))
+        if str(value).strip() and not _is_non_experiential_requirement_text(str(value))
     ]
 
 
@@ -53,7 +53,7 @@ def _tailored_by_source(application: dict[str, Any], source: str) -> list[dict[s
                 " ".join(_normalize_items(item.get("target_requirements"))),
             ]
         )
-        if _is_sensitive_requirement_text(combined):
+        if _is_non_experiential_requirement_text(combined):
             continue
         filtered.append(item)
     return filtered
@@ -80,7 +80,7 @@ def _requirement_map(application: dict[str, Any]) -> list[dict[str, Any]]:
                 " ".join(_normalize_items(item.get("cover_evidence"))),
             ]
         )
-        if _is_sensitive_requirement_text(combined):
+        if _is_non_experiential_requirement_text(combined):
             continue
         filtered.append(item)
     return filtered

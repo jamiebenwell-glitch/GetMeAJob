@@ -134,6 +134,24 @@ BASE_REVIEWER_CASES = [
         "score_max": 90,
         "must_include": ["cad", "testing"],
         "must_exclude_requirements": ["engineering", "mechanical"],
+        "must_target_advice": ["analysis"],
+    },
+    {
+        "name": "admin_gate_text_is_not_treated_as_experience",
+        "job": (
+            "Graduate Mechanical Engineer. Need CAD, manufacturing, testing, and analysis. "
+            "You must have the right to work in the UK without sponsorship, "
+            "be eligible for SC clearance, and hold a full UK driving licence."
+        ),
+        "cv": "Mechanical engineering student with CAD, testing, and manufacturing project work. Improved fixture setup time by 15%.",
+        "cover": "I want this graduate role because it matches my CAD, testing, and manufacturing experience.",
+        "score_min": 58,
+        "score_max": 90,
+        "must_include": ["cad", "testing"],
+        "must_exclude": ["right", "sponsorship", "without", "eligible"],
+        "must_exclude_requirements": ["right", "sponsorship", "without", "eligible", "clearance", "driving", "licence"],
+        "must_target_advice": ["analysis"],
+        "must_note": "admin checks",
     },
 ]
 

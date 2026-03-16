@@ -214,3 +214,49 @@ def test_reviewer_drops_broad_title_labels_when_specific_requirements_exist() ->
     combined_keywords = {item.lower() for item in result.keyword_overlap + result.missing_keywords}
     assert "engineering" not in combined_keywords
     assert "mechanical" not in combined_keywords
+
+
+def test_reviewer_treats_admin_gate_text_as_non_experiential() -> None:
+    result = review(
+        (
+            "Graduate Mechanical Engineer. Need CAD, manufacturing, testing, and analysis. "
+            "You must have the right to work in the UK without sponsorship, "
+            "be eligible for SC clearance, and hold a full UK driving licence."
+        ),
+        "Mechanical engineering student with CAD, testing, and manufacturing project work. Improved fixture setup time by 15%.",
+        "I want this graduate role because it matches my CAD, testing, and manufacturing experience.",
+    )
+
+    blocked_requirements = {"right", "sponsorship", "without", "eligible", "clearance", "driving", "licence"}
+    requirement_names = {item.requirement.lower() for item in result.requirement_evidence}
+    assert blocked_requirements.isdisjoint(requirement_names)
+    assert {"analysis", "cad", "manufacturing", "testing"} <= requirement_names
+
+    combined_keywords = {item.lower() for item in result.keyword_overlap + result.missing_keywords}
+    assert blocked_requirements.isdisjoint(combined_keywords)
+
+    combined_guidance = " ".join(
+        result.follow_up_questions
+        + result.interview_questions
+        + [item.suggestion for item in result.tailored_advice]
+    ).lower()
+    assert all(term not in combined_guidance for term in blocked_requirements)
+    assert "analysis" in combined_guidance
+
+    notes = " ".join(result.notes).lower()
+    assert "admin checks" in notes
+    assert "work authorisation" in notes
+    assert "security clearance" in notes
+    assert "driving licence" in notes
+
+
+def test_reviewer_keeps_doc_specific_advice_targets_when_other_document_covers_gap() -> None:
+    result = review(
+        "Graduate Mechanical Engineer. Need CAD, manufacturing, testing, and analysis.",
+        "Mechanical engineering student with CAD, testing, manufacturing, and analysis project work. Improved fixture setup time by 15%.",
+        "I want this graduate role because it matches my CAD, testing, and manufacturing experience.",
+    )
+
+    cover_advice = next(item for item in result.tailored_advice if item.source == "cover_letter")
+    assert "analysis" in cover_advice.suggestion.lower()
+    assert cover_advice.target_requirements == ["analysis"]

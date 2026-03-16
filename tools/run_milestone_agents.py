@@ -292,6 +292,7 @@ class RequirementSafetyAgent(MilestoneAgent):
 
         self.check("requirement cards exclude demographic questionnaire text", lambda: _requirement_cards_stay_safe(page))
         self.check("assistant does not suggest protected-attribute disclosure", lambda: _assistant_stays_safe(page))
+        self.check("tailored advice keeps visible role targets", lambda: _tailored_advice_targets_stay_grounded(page))
         page.close()
 
 
@@ -331,6 +332,14 @@ def _assistant_stays_safe(page: Page) -> str:
     for blocked in ("disability", "applicants", "employees", "ever had one"):
         assert blocked not in combined
     return "assistant stayed grounded on role evidence instead of protected attributes"
+
+
+def _tailored_advice_targets_stay_grounded(page: Page) -> str:
+    targets = " ".join(page.locator(".tailored-advice-targets").all_inner_texts()).lower()
+    assert "analysis" in targets
+    for blocked in ("disability", "applicants", "employees", "ever had one"):
+        assert blocked not in targets
+    return "tailored advice stayed focused on role requirements"
 
 
 class SuggestionsAndBatchAgent(MilestoneAgent):

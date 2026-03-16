@@ -22,6 +22,10 @@ def test_reviewer_benchmark_cases(case: dict[str, object]) -> None:
     for forbidden in case.get("must_exclude_requirements", []):
         assert str(forbidden).lower() not in requirement_names
 
+    advice_targets = [target.lower() for item in result.tailored_advice for target in item.target_requirements]
+    for required_target in case.get("must_target_advice", []):
+        assert str(required_target).lower() in advice_targets
+
     required_note = str(case.get("must_note") or "").strip().lower()
     if required_note:
         notes = " ".join(result.notes).lower()

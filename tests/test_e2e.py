@@ -334,6 +334,49 @@ def test_browser_review_ignores_demographic_questionnaire_text() -> None:
         browser.close()
 
 
+def test_browser_review_ignores_admin_gate_text() -> None:
+    with run_server() as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1200})
+        review = ReviewerPage(page)
+        review.goto(f"{base_url}/review")
+        review.fill_manual(
+            (
+                "Graduate Mechanical Engineer. Need CAD, manufacturing, testing, and analysis. "
+                "You must have the right to work in the UK without sponsorship, "
+                "be eligible for SC clearance, and hold a full UK driving licence."
+            ),
+            "Mechanical engineering student with CAD, testing, and manufacturing project work. Improved fixture setup time by 15%.",
+            "I want this graduate role because it matches my CAD, testing, and manufacturing experience.",
+        )
+        review.submit_review()
+        review.wait_for_results()
+
+        requirement_text = " ".join(page.locator(".requirement-card").all_inner_texts()).lower()
+        assert "sponsorship" not in requirement_text
+        assert "clearance" not in requirement_text
+        assert "driving licence" not in requirement_text
+
+        notes_text = (page.locator(".improvement-panel").text_content() or "").lower()
+        assert "admin checks" in notes_text
+        assert "work authorisation" in notes_text
+        assert "security clearance" in notes_text
+        assert "driving licence" in notes_text
+
+        page.get_by_label("Question").fill("What experience should I add?")
+        page.get_by_role("button", name="Ask").click()
+        page.wait_for_selector(".chat-message.bot")
+        page.wait_for_function(
+            "() => { const el = document.querySelector('#chatbot-messages'); return el && !el.textContent.toLowerCase().includes('thinking through'); }"
+        )
+        chat_text = (page.locator("#chatbot-messages").text_content() or "").lower()
+        assert "sponsorship" not in chat_text
+        assert "clearance" not in chat_text
+        assert "driving licence" not in chat_text
+        assert "analysis" in chat_text
+        browser.close()
+
+
 def test_browser_review_trims_broad_title_requirement_labels() -> None:
     with run_server() as base_url, sync_playwright() as playwright:
         browser = playwright.chromium.launch()
@@ -352,4 +395,23 @@ def test_browser_review_trims_broad_title_requirement_labels() -> None:
         assert "engineering" not in requirement_labels
         assert "mechanical" not in requirement_labels
         assert {"analysis", "cad", "manufacturing", "testing"} <= set(requirement_labels)
+        browser.close()
+
+
+def test_browser_review_shows_doc_specific_advice_target() -> None:
+    with run_server() as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1200})
+        review = ReviewerPage(page)
+        review.goto(f"{base_url}/review")
+        review.fill_manual(
+            "Graduate Mechanical Engineer. Need CAD, manufacturing, testing, and analysis.",
+            "Mechanical engineering student with CAD, testing, manufacturing, and analysis project work. Improved fixture setup time by 15%.",
+            "I want this graduate role because it matches my CAD, testing, and manufacturing experience.",
+        )
+        review.submit_review()
+        review.wait_for_results()
+
+        target_lines = [text.lower() for text in page.locator(".tailored-advice-targets").all_inner_texts()]
+        assert any("analysis" in text for text in target_lines)
         browser.close()

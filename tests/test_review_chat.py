@@ -124,3 +124,85 @@ def test_review_chat_filters_protected_attribute_prompts_from_bad_payload() -> N
     combined = " ".join([add_reply, map_reply, interview_reply]).lower()
     assert "disability" not in combined
     assert "analysis" in combined
+
+
+def test_review_chat_filters_admin_gate_prompts_from_bad_payload() -> None:
+    payload = {
+        "job": (
+            "Graduate Mechanical Engineer. Need CAD, manufacturing, testing, and analysis. "
+            "You must have the right to work in the UK without sponsorship, "
+            "be eligible for SC clearance, and hold a full UK driving licence."
+        ),
+        "cv_text": "Mechanical engineering student with CAD, testing, and manufacturing project work.",
+        "cover_text": "I want this graduate role because it matches my CAD and manufacturing experience.",
+        "notes": ["This role also includes admin checks that are not scored as experience evidence: work authorisation, security clearance, driving licence."],
+        "missing_keywords": ["sponsorship", "analysis", "clearance", "driving licence"],
+        "keyword_overlap": ["cad", "testing", "manufacturing"],
+        "categories": [{"label": "Technical", "coverage": 72, "missing_keywords": ["analysis"]}],
+        "tailored_advice": [
+            {
+                "source": "cv",
+                "reason": "Administrative gates should not surface as experiential requirements.",
+                "excerpt": "You must have the right to work in the UK without sponsorship.",
+                "suggestion": "Add sponsorship evidence.",
+                "target_requirements": ["sponsorship"],
+            },
+            {
+                "source": "cv",
+                "reason": "Analysis evidence is still genuinely missing.",
+                "excerpt": "Mechanical engineering student with CAD, testing, and manufacturing project work.",
+                "suggestion": "Add one analysis example with the tool, the task, and the result.",
+                "target_requirements": ["analysis"],
+            },
+        ],
+        "requirement_evidence": [
+            {
+                "requirement": "sponsorship",
+                "status": "missing",
+                "cv_evidence": [],
+                "cover_evidence": [],
+                "target_line": "You must have the right to work in the UK without sponsorship.",
+            },
+            {
+                "requirement": "analysis",
+                "status": "missing",
+                "cv_evidence": [],
+                "cover_evidence": [],
+                "target_line": "Need CAD, manufacturing, testing, and analysis.",
+            },
+            {
+                "requirement": "security clearance",
+                "status": "missing",
+                "cv_evidence": [],
+                "cover_evidence": [],
+                "target_line": "Be eligible for SC clearance.",
+            },
+            {
+                "requirement": "driving licence",
+                "status": "missing",
+                "cv_evidence": [],
+                "cover_evidence": [],
+                "target_line": "Hold a full UK driving licence.",
+            },
+        ],
+        "follow_up_questions": [
+            "Do you have any real example of sponsorship that is not yet in the CV or cover letter?",
+            "Do you have any real example of analysis that is not yet in the CV or cover letter?",
+        ],
+        "interview_questions": [
+            "Tell me about a time you used sponsorship.",
+            "Tell me about a time you used analysis.",
+            "Tell me about a time you used driving licence.",
+        ],
+        "role_suggestions": [],
+    }
+
+    add_reply = answer_review_question(payload, "What experience should I add?")
+    map_reply = answer_review_question(payload, "Show me the requirement map")
+    interview_reply = answer_review_question(payload, "What interview questions will they ask?")
+
+    combined = " ".join([add_reply, map_reply, interview_reply]).lower()
+    assert "sponsorship" not in combined
+    assert "driving licence" not in combined
+    assert "clearance" not in combined
+    assert "analysis" in combined

@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
@@ -54,6 +54,52 @@ NON_REQUIREMENT_PATTERNS = (
     "to do this, we must ask",
     "voluntary self-identification",
 )
+ADMIN_REQUIREMENT_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "work authorisation",
+        (
+            "right to work",
+            "work authorisation",
+            "work authorization",
+            "without sponsorship",
+            "requires sponsorship",
+            "require sponsorship",
+            "visa sponsorship",
+            "sponsorship",
+        ),
+    ),
+    (
+        "security clearance",
+        (
+            "security clearance",
+            "sc clearance",
+            "dv clearance",
+            "bpss clearance",
+            "eligible for clearance",
+            "eligible for sc",
+            "eligible for dv",
+            "eligible for security clearance",
+        ),
+    ),
+    (
+        "driving licence",
+        (
+            "driving licence",
+            "driving license",
+            "full uk driving",
+            "full clean driving",
+        ),
+    ),
+)
+ADMIN_REQUIREMENT_FALLBACK_LABELS = {
+    "clearance": "security clearance",
+    "eligible": "security clearance",
+    "licence": "driving licence",
+    "license": "driving licence",
+    "right": "work authorisation",
+    "sponsorship": "work authorisation",
+    "without": "work authorisation",
+}
 
 IMPACT_VERBS = {
     "achieved", "automated", "built", "created", "delivered", "designed", "developed", "drove",
@@ -177,6 +223,7 @@ class Highlight:
     excerpt: str
     reason: str
     suggestion: str
+    target_requirements: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -529,11 +576,32 @@ def _is_sensitive_requirement_text(text: str) -> bool:
     return protected_hits >= 2 and compliance_hits >= 1
 
 
+def _administrative_requirement_labels(text: str) -> list[str]:
+    lowered = _normalize_text(text)
+    if not lowered:
+        return []
+
+    labels: list[str] = []
+    fallback_label = ADMIN_REQUIREMENT_FALLBACK_LABELS.get(lowered.strip())
+    if fallback_label:
+        labels.append(fallback_label)
+    for label, patterns in ADMIN_REQUIREMENT_PATTERNS:
+        if label in labels:
+            continue
+        if any(pattern in lowered for pattern in patterns):
+            labels.append(label)
+    return labels
+
+
+def _is_non_experiential_requirement_text(text: str) -> bool:
+    return _is_sensitive_requirement_text(text) or bool(_administrative_requirement_labels(text))
+
+
 def _is_requirement_noise_line(line: str) -> bool:
     lowered = _normalize_text(line)
     if not lowered:
         return True
-    return _is_sensitive_requirement_text(lowered)
+    return _is_non_experiential_requirement_text(lowered)
 
 
 def _line_priority(line: str) -> tuple[float, str]:
@@ -554,14 +622,14 @@ def _extract_requirement_signals(job_text: str) -> list[RequirementSignal]:
     title = segments[0]
     title_concepts = _extract_concepts(title)
     for concept in title_concepts:
-        if _is_sensitive_requirement_text(concept):
+        if _is_non_experiential_requirement_text(concept):
             continue
         signals.append(RequirementSignal(concept=concept, weight=TITLE_CONCEPT_BOOST, priority="title", source_line=title.strip()))
         seen.add((concept, title.strip()))
 
     for token in _extract_keywords(title, limit=5):
         concept = CONCEPT_INDEX.get(token)
-        if concept or token in GENERIC_TERMS or token in STOPWORDS or _is_sensitive_requirement_text(token):
+        if concept or token in GENERIC_TERMS or token in STOPWORDS or _is_non_experiential_requirement_text(token):
             continue
         pair = (token, title.strip())
         if pair in seen:
@@ -576,7 +644,7 @@ def _extract_requirement_signals(job_text: str) -> list[RequirementSignal]:
         concepts = _extract_concepts(line)
         if concepts:
             for concept, count in concepts.items():
-                if _is_sensitive_requirement_text(concept):
+                if _is_non_experiential_requirement_text(concept):
                     continue
                 pair = (concept, line)
                 if pair in seen:
@@ -593,7 +661,7 @@ def _extract_requirement_signals(job_text: str) -> list[RequirementSignal]:
             continue
 
         for token in _extract_keywords(line, limit=4):
-            if token in GENERIC_TERMS or _is_sensitive_requirement_text(token):
+            if token in GENERIC_TERMS or _is_non_experiential_requirement_text(token):
                 continue
             pair = (token, line)
             if pair in seen:
@@ -613,7 +681,7 @@ def _category_for_concept(concept: str) -> str:
 def _build_requirement_map(job_text: str) -> dict[str, RequirementSignal]:
     aggregated: dict[str, RequirementSignal] = {}
     for signal in _extract_requirement_signals(job_text):
-        if _is_sensitive_requirement_text(signal.concept) or _is_requirement_noise_line(signal.source_line):
+        if _is_non_experiential_requirement_text(signal.concept) or _is_requirement_noise_line(signal.source_line):
             continue
         current = aggregated.get(signal.concept)
         if current is None or signal.weight > current.weight:
@@ -1093,16 +1161,40 @@ def _build_highlights(text: str, job_text: str, start_id: int, doc_name: str) ->
 
         if doc_name == "Cover letter" and len(concepts) <= 1 and any(word in lowered for word in ("interested", "passion", "fit", "opportunity")):
             target = ", ".join(focus[:2]) if focus else "the role requirements"
-            highlights.append(Highlight(start_id + len(highlights), segment, "Cover letter point is too generic.", f"Replace this with a role-specific sentence tied to {target} and one concrete example."))
+            highlights.append(
+                Highlight(
+                    start_id + len(highlights),
+                    segment,
+                    "Cover letter point is too generic.",
+                    f"Replace this with a role-specific sentence tied to {target} and one concrete example.",
+                    target_requirements=focus[:2],
+                )
+            )
             continue
 
         if doc_name == "CV" and len(words) >= 8 and not concepts and focus:
-            highlights.append(Highlight(start_id + len(highlights), segment, "CV point does not help this application enough.", f"Use this space for evidence linked to {', '.join(focus[:2])} instead."))
+            highlights.append(
+                Highlight(
+                    start_id + len(highlights),
+                    segment,
+                    "CV point does not help this application enough.",
+                    f"Use this space for evidence linked to {', '.join(focus[:2])} instead.",
+                    target_requirements=focus[:2],
+                )
+            )
             continue
 
         segment_labels = {_concept_label(concept) for concept in concepts}
         if focus and len(words) >= 8 and not any(item in segment_labels for item in focus):
-            highlights.append(Highlight(start_id + len(highlights), segment, f"{doc_name} point is not aligned tightly enough to the advert.", f"Tie this point more directly to {', '.join(focus[:2])}."))
+            highlights.append(
+                Highlight(
+                    start_id + len(highlights),
+                    segment,
+                    f"{doc_name} point is not aligned tightly enough to the advert.",
+                    f"Tie this point more directly to {', '.join(focus[:2])}.",
+                    target_requirements=focus[:2],
+                )
+            )
     return highlights
 
 
@@ -1117,23 +1209,25 @@ def _build_tailored_advice(
     advice: list[TailoredAdvice] = []
 
     for highlight in cv_highlights[:2]:
+        targets = list(highlight.target_requirements or focus[:2])
         advice.append(
             TailoredAdvice(
                 source="cv",
                 reason=highlight.reason,
                 excerpt=highlight.excerpt,
                 suggestion=highlight.suggestion,
-                target_requirements=focus[:2],
+                target_requirements=targets,
             )
         )
     for highlight in cover_highlights[:2]:
+        targets = list(highlight.target_requirements or focus[:2])
         advice.append(
             TailoredAdvice(
                 source="cover_letter",
                 reason=highlight.reason,
                 excerpt=highlight.excerpt,
                 suggestion=highlight.suggestion,
-                target_requirements=focus[:2],
+                target_requirements=targets,
             )
         )
 
@@ -1276,6 +1370,13 @@ def review(job_text: str, cv_text: str, cover_text: str) -> ReviewResult:
         notes.append("Keep the CV concise and the cover letter tightly focused on the target role.")
     if clarity < 70:
         notes.append("Shorten dense sentences so the strongest evidence is easy to scan.")
+    administrative_requirements = _administrative_requirement_labels(job_text)
+    if administrative_requirements:
+        notes.append(
+            "This role also includes admin checks that are not scored as experience evidence: "
+            + ", ".join(administrative_requirements)
+            + "."
+        )
 
     cv_highlights = _build_highlights(cv_text, job_text, 1, "CV")
     cover_highlights = _build_highlights(cover_text, job_text, 101, "Cover letter")
