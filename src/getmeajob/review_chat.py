@@ -45,6 +45,13 @@ def _top_suggestion(application: dict[str, Any]) -> dict[str, Any] | None:
     return suggestions[0]
 
 
+def _requirement_map(application: dict[str, Any]) -> list[dict[str, Any]]:
+    items = application.get("requirement_evidence") or []
+    if not isinstance(items, list):
+        return []
+    return items
+
+
 def _evidence_lines(text: str, terms: list[str], limit: int = 2) -> list[str]:
     lowered_terms = [term.lower() for term in terms if term]
     matches: list[str] = []
@@ -82,6 +89,9 @@ def answer_review_question(application: dict[str, Any], question: str) -> str:
     cv_advice = _tailored_by_source(application, "cv")
     cover_advice = _tailored_by_source(application, "cover_letter")
     top_suggestion = _top_suggestion(application)
+    requirement_evidence = _requirement_map(application)
+    follow_up_questions = _normalize_items(application.get("follow_up_questions"))
+    interview_questions = _normalize_items(application.get("interview_questions"))
     cv_text = str(application.get("cv_text") or "")
     cover_text = str(application.get("cover_text") or "")
 
@@ -93,6 +103,20 @@ def answer_review_question(application: dict[str, Any], question: str) -> str:
                 f"It fits this CV because it overlaps on {', '.join(overlap[:3]) or 'the strongest matched skills'}."
             )
         return "There is not enough grounded evidence in this CV yet to recommend a stronger alternative role."
+
+    if any(word in lower for word in ("rewrite", "improve this", "better version")):
+        advice = cv_advice[0] if "cv" in lower else cover_advice[0] if "cover" in lower else (cv_advice[0] if cv_advice else cover_advice[0] if cover_advice else None)
+        if advice:
+            source_text = _quote(advice.get("excerpt"))
+            target_requirements = _normalize_items(advice.get("target_requirements"))
+            target_text = f" Tie it explicitly to {', '.join(target_requirements[:2])}." if target_requirements else ""
+            return (
+                f'Keep the truth of "{source_text}", but rewrite it more directly: '
+                f'{advice.get("suggestion")}{target_text}'
+            )
+        if follow_up_questions:
+            return f"I cannot rewrite this credibly yet without inventing evidence. Start by answering: {follow_up_questions[0]}"
+        return "I cannot rewrite this credibly yet without inventing evidence. Add one concrete example, tool, and outcome first."
 
     if any(word in lower for word in ("cover", "letter")):
         advice = cover_advice[0] if cover_advice else None
@@ -139,6 +163,17 @@ def answer_review_question(application: dict[str, Any], question: str) -> str:
             )
         return "The strongest next step is to add clearer, measurable evidence to the experience you already mention."
 
+    if any(word in lower for word in ("requirement", "map", "evidence map")):
+        weak = [item for item in requirement_evidence if str(item.get("status")) in {"missing", "cover_only", "weak"}]
+        if weak:
+            item = weak[0]
+            return (
+                f'{item.get("requirement")} is currently {item.get("status").replace("_", " ")}. '
+                f'CV evidence: { _quote((item.get("cv_evidence") or ["none yet"])[0]) }. '
+                f'Cover letter evidence: { _quote((item.get("cover_evidence") or ["none yet"])[0]) }.'
+            )
+        return "The strongest requirements are already covered with evidence in both the CV and the cover letter."
+
     if any(word in lower for word in ("score", "low", "why", "fit")):
         weak_labels = [f'{item.get("label")} ({item.get("coverage")}%)' for item in weak_categories[:3]]
         summary = weak_labels or ["tailoring and evidence depth"]
@@ -152,6 +187,16 @@ def answer_review_question(application: dict[str, Any], question: str) -> str:
             f'The strongest matched requirements are {", ".join(matched_keywords[:4]) or "not clear enough yet"}. '
             f'The biggest gaps are {", ".join(missing_keywords[:4]) or "small in this pass"}.'
         )
+
+    if any(word in lower for word in ("interview", "question", "questions")):
+        if interview_questions:
+            return "Likely interview probes: " + " | ".join(interview_questions[:3])
+        return "The interviewer is most likely to probe your missing requirements and ask for concrete examples with results."
+
+    if any(word in lower for word in ("follow up", "follow-up", "what do you need from me", "what else")):
+        if follow_up_questions:
+            return "The next factual questions to answer are: " + " | ".join(follow_up_questions[:3])
+        return "I already have enough evidence to comment without extra follow-up questions."
 
     if weak_categories:
         category = weak_categories[0]

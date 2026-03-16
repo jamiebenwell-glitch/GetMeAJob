@@ -125,8 +125,8 @@
       <strong>{{ review_history | length }}</strong>
     </article>
     <article class="hero-stat">
-      <span>Account</span>
-      <strong>{% if user %}Live{% else %}Guest{% endif %}</strong>
+      <span>Interviews</span>
+      <strong>{{ outcome_summary.interview }}</strong>
     </article>
   </div>
 </section>
@@ -242,6 +242,16 @@
               <strong>{{ item.job_title }}</strong>
               <span>{{ item.created_at }}</span>
               <p>{{ item.cv_title }} / {{ item.cover_title }}</p>
+              <label class="history-outcome-label">
+                <span>Outcome</span>
+                <select class="history-outcome" data-review-id="{{ item.id }}" aria-label="Outcome for {{ item.job_title }}">
+                  <option value="not_set" {% if item.outcome_status == 'not_set' %}selected{% endif %}>Not set</option>
+                  <option value="applied" {% if item.outcome_status == 'applied' %}selected{% endif %}>Applied</option>
+                  <option value="interview" {% if item.outcome_status == 'interview' %}selected{% endif %}>Interview</option>
+                  <option value="reject" {% if item.outcome_status == 'reject' %}selected{% endif %}>Rejected</option>
+                  <option value="offer" {% if item.outcome_status == 'offer' %}selected{% endif %}>Offer</option>
+                </select>
+              </label>
               <div class="history-actions">
                 <a class="secondary history-open" href="/review/history/{{ item.id }}">Open review</a>
               </div>
@@ -267,6 +277,34 @@
       </div>
       {% else %}
       <p class="sidebar-empty">Sign in to save revisions and compare how your drafts improve over time.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel sidebar-panel evidence-panel">
+      <div class="panel-head compact-head">
+        <div>
+          <p class="eyebrow">Evidence Bank</p>
+          <h3>Reusable proof points</h3>
+        </div>
+      </div>
+      {% if evidence_bank %}
+      <div class="evidence-list">
+        {% for item in evidence_bank %}
+        <article class="evidence-card">
+          <strong>{{ item.title or 'Evidence from review' }}</strong>
+          <p>{{ item.excerpt }}</p>
+          {% if item.tags %}
+          <div class="evidence-tags">
+            {% for tag in item.tags %}
+            <span>{{ tag }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="sidebar-empty">Saved evidence from your strongest CV points will appear here after signed-in reviews.</p>
       {% endif %}
     </section>
   </aside>
@@ -366,6 +404,25 @@
                   <article class="metric-card"><span>Structure</span><strong>{{ application.score.structure }}%</strong></article>
                   <article class="metric-card"><span>Clarity</span><strong>{{ application.score.clarity }}%</strong></article>
                 </section>
+                <div class="result-next-actions">
+                  <a href="/interview-prep" class="primary open-interview-prep" data-application-index="{{ application.index }}">Interview prep</a>
+                </div>
+              </section>
+
+              <section class="notes-panel decision-panel">
+                <div class="decision-head">
+                  <div>
+                    <p class="eyebrow">Hiring Manager View</p>
+                    <h4>{{ application.verdict.label or 'Review summary' }}</h4>
+                  </div>
+                  <span class="decision-confidence">{{ application.verdict.confidence or 'Medium confidence' }}</span>
+                </div>
+                <div class="decision-meta">
+                  <span>Profile: {{ application.profile or 'General Engineering' }}</span>
+                  <span>ATS score: {{ application.ats_diagnostics.score or 0 }}%</span>
+                  <span>Evidence items: {{ application.requirement_evidence | length }}</span>
+                </div>
+                <p class="decision-rationale">{{ application.verdict.rationale or 'The score and evidence map are shown below.' }}</p>
               </section>
 
               <section class="notes-panel improvement-panel">
@@ -414,6 +471,53 @@
                   </div>
                 </section>
 
+                <section class="notes-panel requirement-map-panel">
+                  <div class="section-heading">
+                    <div>
+                      <p class="eyebrow">Evidence Map</p>
+                      <h4>Requirement to evidence</h4>
+                    </div>
+                  </div>
+                  <div class="requirement-map-grid">
+                    {% for item in application.requirement_evidence %}
+                    <article class="requirement-card status-{{ item.status }}">
+                      <div class="requirement-head">
+                        <div>
+                          <strong>{{ item.requirement }}</strong>
+                          <span>{{ item.priority | replace('_', ' ') | title }}</span>
+                        </div>
+                        <span class="requirement-status">{{ item.status | replace('_', ' ') | title }}</span>
+                      </div>
+                      {% if item.target_line %}
+                      <p class="requirement-target">Advert cue: {{ item.target_line }}</p>
+                      {% endif %}
+                      <div class="requirement-evidence-columns">
+                        <div>
+                          <p class="requirement-label">CV evidence</p>
+                          <ul>
+                            {% for excerpt in item.cv_evidence %}
+                            <li>{{ excerpt }}</li>
+                            {% else %}
+                            <li>None yet</li>
+                            {% endfor %}
+                          </ul>
+                        </div>
+                        <div>
+                          <p class="requirement-label">Cover letter evidence</p>
+                          <ul>
+                            {% for excerpt in item.cover_evidence %}
+                            <li>{{ excerpt }}</li>
+                            {% else %}
+                            <li>None yet</li>
+                            {% endfor %}
+                          </ul>
+                        </div>
+                      </div>
+                    </article>
+                    {% endfor %}
+                  </div>
+                </section>
+
                 <section class="category-section notes-panel">
                   <h4>Requirement coverage</h4>
                   <div class="category-grid">
@@ -440,6 +544,57 @@
                     <h4>Missing keywords</h4>
                     <p>{{ application.missing_keywords | join(', ') if application.missing_keywords else 'No major missing keywords.' }}</p>
                   </article>
+                </section>
+
+                <section class="compact-keywords compact-keywords-grid">
+                  <article class="notes-panel ats-panel">
+                    <div class="section-heading">
+                      <div>
+                        <p class="eyebrow">ATS Readiness</p>
+                        <h4>Parser checks</h4>
+                      </div>
+                      <span class="ats-score">{{ application.ats_diagnostics.score }}%</span>
+                    </div>
+                    <div class="ats-check-list">
+                      {% for check in application.ats_diagnostics.checks %}
+                      <article class="ats-check ats-{{ check.status }}">
+                        <strong>{{ check.name }}</strong>
+                        <p>{{ check.message }}</p>
+                      </article>
+                      {% endfor %}
+                    </div>
+                  </article>
+                  <article class="notes-panel follow-up-panel">
+                    <div class="section-heading">
+                      <div>
+                        <p class="eyebrow">Follow-up</p>
+                        <h4>Questions before rewriting</h4>
+                      </div>
+                    </div>
+                    <ol class="action-list">
+                      {% for question in application.follow_up_questions %}
+                      <li>{{ question }}</li>
+                      {% else %}
+                      <li>No major factual gaps were flagged in this pass.</li>
+                      {% endfor %}
+                    </ol>
+                  </article>
+                </section>
+
+                <section class="notes-panel interview-panel">
+                  <div class="section-heading">
+                    <div>
+                      <p class="eyebrow">Interview Handoff</p>
+                      <h4>Questions you should be ready for</h4>
+                    </div>
+                  </div>
+                  <ol class="action-list">
+                    {% for question in application.interview_questions %}
+                    <li>{{ question }}</li>
+                    {% else %}
+                    <li>The strongest interview questions will usually follow your missing requirements and your biggest claims.</li>
+                    {% endfor %}
+                  </ol>
                 </section>
 
                 <section class="suggestions-panel">

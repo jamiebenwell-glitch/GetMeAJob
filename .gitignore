@@ -9,3 +9,5 @@ build/
 *.log
 data/app.db
 data/reviewer_benchmark_*.json
+data/milestone_test_report.json
+data/visual_regression/

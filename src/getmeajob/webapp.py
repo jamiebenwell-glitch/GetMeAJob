@@ -16,11 +16,13 @@ from starlette.middleware.sessions import SessionMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from getmeajob.ingest import extract_job_text_from_url, extract_text_from_bytes
+from getmeajob.interview_prep import build_interview_prep
 from getmeajob.review_chat import answer_review_question
 from getmeajob.reviewer import recommend_roles, review
 from getmeajob.storage import (
     create_review_run,
     get_draft,
+    list_evidence_bank,
     get_review_run,
     get_revision,
     get_user,
@@ -30,8 +32,11 @@ from getmeajob.storage import (
     list_drafts,
     list_revisions,
     list_review_history,
+    review_outcome_summary,
     save_draft,
+    update_review_outcome,
     upsert_user,
+    upsert_evidence_item,
 )
 
 
@@ -212,12 +217,18 @@ def _empty_application(index: int = 1, latest_drafts: dict[str, dict[str, Any]] 
         "cover_letter_file_name": cover_draft["title"] if cover_draft else "",
         "errors": [],
         "score": None,
+        "profile": "",
+        "verdict": {},
         "notes": [],
         "keyword_overlap": [],
         "missing_keywords": [],
         "cv_highlights": [],
         "cover_highlights": [],
         "tailored_advice": [],
+        "requirement_evidence": [],
+        "ats_diagnostics": {"score": 0, "checks": []},
+        "follow_up_questions": [],
+        "interview_questions": [],
         "cv_segments": [],
         "cover_segments": [],
         "categories": [],
@@ -268,6 +279,30 @@ def _history_chart_points(history: list[dict[str, Any]]) -> list[dict[str, Any]]
         }
         for item in ordered
     ]
+
+
+def _save_application_evidence(user_id: int, review_id: int, application: dict[str, Any]) -> None:
+    requirement_map = application.get("requirement_evidence") or []
+    stored: set[str] = set()
+    for item in requirement_map:
+        if not isinstance(item, dict):
+            continue
+        requirement = str(item.get("requirement") or "").strip()
+        cv_evidence = item.get("cv_evidence") or []
+        if not isinstance(cv_evidence, list):
+            continue
+        for excerpt in cv_evidence[:2]:
+            cleaned = str(excerpt or "").strip()
+            if not cleaned or cleaned in stored:
+                continue
+            stored.add(cleaned)
+            upsert_evidence_item(
+                user_id,
+                title=requirement or "Evidence from CV",
+                excerpt=cleaned,
+                tags=[requirement] if requirement else [],
+                source_review_id=review_id,
+            )
 
 
 def _line_diff(previous: str, current: str) -> list[dict[str, str]]:
@@ -365,6 +400,8 @@ def _review_page_context(
     user = _current_user(request)
     drafts_grouped = {"cv": [], "cover_letter": []}
     history: list[dict[str, Any]] = []
+    evidence_bank: list[dict[str, Any]] = []
+    outcome_summary = {"applied": 0, "interview": 0, "reject": 0, "offer": 0}
     warnings = list(page_warnings or [])
     if user:
         try:
@@ -375,6 +412,14 @@ def _review_page_context(
             history = list_review_history(int(user["id"]))
         except Exception:
             warnings.append("Review history could not be loaded right now.")
+        try:
+            evidence_bank = list_evidence_bank(int(user["id"]))
+        except Exception:
+            warnings.append("Evidence bank could not be loaded right now.")
+        try:
+            outcome_summary = review_outcome_summary(int(user["id"]))
+        except Exception:
+            warnings.append("Outcome stats could not be loaded right now.")
 
     scored_applications = [application for application in applications if application.get("score")]
     context = {
@@ -387,6 +432,8 @@ def _review_page_context(
         "drafts": drafts_grouped,
         "review_history": history,
         "history_chart_points": _history_chart_points(history),
+        "evidence_bank": evidence_bank,
+        "outcome_summary": outcome_summary,
         "page_warnings": warnings,
     }
     return context
@@ -423,9 +470,15 @@ def _review_application_from_history(review_run: dict[str, Any]) -> dict[str, An
     application["notes"] = list(application.get("notes") or [])
     application["keyword_overlap"] = list(application.get("keyword_overlap") or [])
     application["missing_keywords"] = list(application.get("missing_keywords") or [])
+    application["profile"] = str(application.get("profile") or "")
+    application["verdict"] = dict(application.get("verdict") or {})
     application["cv_highlights"] = list(application.get("cv_highlights") or [])
     application["cover_highlights"] = list(application.get("cover_highlights") or [])
     application["tailored_advice"] = list(application.get("tailored_advice") or [])
+    application["requirement_evidence"] = list(application.get("requirement_evidence") or [])
+    application["ats_diagnostics"] = dict(application.get("ats_diagnostics") or {"score": 0, "checks": []})
+    application["follow_up_questions"] = list(application.get("follow_up_questions") or [])
+    application["interview_questions"] = list(application.get("interview_questions") or [])
     application["categories"] = list(application.get("categories") or [])
     application["role_suggestions"] = list(application.get("role_suggestions") or [])
     application["cv_segments"] = list(application.get("cv_segments") or [])
@@ -445,6 +498,14 @@ def jobs_page(request: Request) -> HTMLResponse:
         **_job_catalog_context(),
     }
     return templates.TemplateResponse(request, "jobs.html", context)
+
+
+@app.get("/interview-prep", response_class=HTMLResponse)
+def interview_prep_page(request: Request) -> HTMLResponse:
+    context = {
+        **_common_context(request, "interview-prep"),
+    }
+    return templates.TemplateResponse(request, "interview_prep.html", context)
 
 
 @app.get("/review", response_class=HTMLResponse)
@@ -591,6 +652,29 @@ async def review_assistant_endpoint(request: Request) -> JSONResponse:
     return JSONResponse({"answer": answer})
 
 
+@app.post("/api/interview-prep", response_class=JSONResponse)
+async def interview_prep_endpoint(request: Request) -> JSONResponse:
+    payload = await request.json()
+    application = payload.get("application")
+    if not isinstance(application, dict):
+        raise HTTPException(status_code=400, detail="Application payload is required.")
+    prep = build_interview_prep(application, _load_company_jobs(), live_research=not _is_test_mode())
+    return JSONResponse(prep)
+
+
+@app.post("/api/review-runs/{review_id}/outcome", response_class=JSONResponse)
+async def review_outcome_endpoint(request: Request, review_id: int) -> JSONResponse:
+    user = _current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Sign in required.")
+    payload = await request.json()
+    outcome_status = str(payload.get("outcome_status") or "").strip()
+    updated = update_review_outcome(int(user["id"]), review_id, outcome_status)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Review not found.")
+    return JSONResponse(updated)
+
+
 @app.get("/api/drafts/{draft_id}/revisions", response_class=JSONResponse)
 def draft_revisions_endpoint(request: Request, draft_id: int, revision_id: int | None = None) -> JSONResponse:
     user = _current_user(request)
@@ -725,12 +809,21 @@ async def review_submit(request: Request) -> HTMLResponse:
 
         result = review(job_text, cv_text, cover_text)
         application["score"] = result.score.__dict__
+        application["profile"] = result.profile
+        application["verdict"] = result.verdict.__dict__
         application["notes"] = result.notes
         application["keyword_overlap"] = result.keyword_overlap
         application["missing_keywords"] = result.missing_keywords
         application["cv_highlights"] = [highlight.__dict__ for highlight in result.cv_highlights]
         application["cover_highlights"] = [highlight.__dict__ for highlight in result.cover_highlights]
         application["tailored_advice"] = [advice.__dict__ for advice in result.tailored_advice]
+        application["requirement_evidence"] = [item.__dict__ for item in result.requirement_evidence]
+        application["ats_diagnostics"] = {
+            "score": result.ats_diagnostics.score,
+            "checks": [item.__dict__ for item in result.ats_diagnostics.checks],
+        }
+        application["follow_up_questions"] = result.follow_up_questions
+        application["interview_questions"] = result.interview_questions
         application["cv_segments"] = _annotate_segments(cv_text, result.cv_highlights)
         application["cover_segments"] = _annotate_segments(cover_text, result.cover_highlights)
         application["categories"] = [category.__dict__ for category in result.categories]
@@ -754,19 +847,25 @@ async def review_submit(request: Request) -> HTMLResponse:
                 "cover_letter_file_name": application["cover_letter_file_name"],
                 "errors": [],
                 "score": application["score"],
+                "profile": application["profile"],
+                "verdict": application["verdict"],
                 "notes": application["notes"],
                 "keyword_overlap": application["keyword_overlap"],
                 "missing_keywords": application["missing_keywords"],
                 "cv_highlights": application["cv_highlights"],
                 "cover_highlights": application["cover_highlights"],
                 "tailored_advice": application["tailored_advice"],
+                "requirement_evidence": application["requirement_evidence"],
+                "ats_diagnostics": application["ats_diagnostics"],
+                "follow_up_questions": application["follow_up_questions"],
+                "interview_questions": application["interview_questions"],
                 "cv_segments": application["cv_segments"],
                 "cover_segments": application["cover_segments"],
                 "categories": application["categories"],
                 "role_suggestions": application["role_suggestions"],
             }
             try:
-                create_review_run(
+                saved_review = create_review_run(
                     int(user["id"]),
                     job_title=_job_title(job_text, job_url),
                     job_url=job_url,
@@ -777,6 +876,8 @@ async def review_submit(request: Request) -> HTMLResponse:
                     cover_title=str(saved_cover["title"]) if saved_cover else cover_draft_title,
                     application_payload=saved_application,
                 )
+                if saved_review and saved_review.get("id"):
+                    _save_application_evidence(int(user["id"]), int(saved_review["id"]), application)
             except Exception:
                 page_warnings.append("Your review ran, but it could not be written to account history.")
 

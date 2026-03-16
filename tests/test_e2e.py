@@ -158,6 +158,13 @@ def test_browser_review_results_and_history() -> None:
         assert page.locator("text=CV markup").count() == 0
         assert page.locator(".issue-card").count() == 0
         assert int(page.locator(".score").first.text_content().strip().rstrip("%")) >= 60
+        page.wait_for_selector("text=Hiring Manager View")
+        page.wait_for_selector("text=Requirement to evidence")
+        page.wait_for_selector("text=Parser checks")
+        page.wait_for_selector("text=Questions before rewriting")
+        page.wait_for_selector("text=Questions you should be ready for")
+        assert page.locator(".requirement-card").count() >= 1
+        assert page.locator(".ats-check").count() >= 1
         page.wait_for_selector("text=What to change in your wording")
         assert page.locator(".tailored-advice-card").count() >= 2
         assert page.locator("text=You wrote").count() >= 1
@@ -168,20 +175,55 @@ def test_browser_review_results_and_history() -> None:
         page.get_by_label("Question").fill("What should I change first?")
         page.get_by_role("button", name="Ask").click()
         page.wait_for_selector("text=Start with")
+        page.get_by_label("Question").fill("Show me the requirement map")
+        page.get_by_role("button", name="Ask").click()
+        page.wait_for_selector("text=CV evidence:")
         page.get_by_label("Question").fill("What should I change in my cover letter?")
         page.get_by_role("button", name="Ask").click()
         page.wait_for_selector("text=In your cover letter you wrote")
+        page.get_by_label("Question").fill("What interview questions will they ask?")
+        page.get_by_role("button", name="Ask").click()
+        page.wait_for_selector("text=Likely interview probes")
         review.open_reviewer_tab()
         page.wait_for_selector("text=Score trend")
         assert page.locator("#history-chart svg").is_visible()
         assert page.locator(".history-item").count() >= 1
-        page.reload(wait_until="networkidle")
+        assert page.locator(".evidence-card").count() >= 1
+        page.locator(".history-outcome").first.select_option("interview")
+        page.wait_for_timeout(400)
+        page.goto(f"{base_url}/review", wait_until="networkidle")
+        assert page.locator(".history-outcome").first.input_value() == "interview"
         page.get_by_role("link", name="Open review").first.click()
         page.wait_for_selector("text=Scored applications")
         assert page.locator(".score").first.text_content().strip().endswith("%")
         assert review.first_set().get_by_label("Paste CV text").input_value().startswith(
             "Mechanical engineering student with CAD"
         )
+        browser.close()
+
+
+def test_browser_review_flows_into_interview_prep() -> None:
+    with run_server() as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1200})
+        review = ReviewerPage(page)
+        review.goto(f"{base_url}/review")
+        review.fill_manual(
+            "Mechanical engineering placement at Acme. Need CAD, manufacturing, testing, and analysis.",
+            "Mechanical engineering student with CAD, prototype testing, and manufacturing project work. Improved setup time by 15%.",
+            "I want this role because it matches my CAD, testing, and manufacturing work.",
+        )
+        review.submit_review()
+        review.wait_for_results()
+
+        page.get_by_role("link", name="Interview prep").first.click()
+        page.wait_for_url(f"{base_url}/interview-prep")
+        page.wait_for_selector("text=What the process probably looks like")
+        page.wait_for_selector("text=What this company seems to care about")
+        page.wait_for_selector("text=Question sets to rehearse")
+        assert page.locator(".prep-stage-card").count() >= 1
+        assert page.locator(".prep-question-group-card").count() >= 1
+        assert page.locator(".prep-source-card").count() >= 1 or page.locator(".sidebar-empty").count() >= 1
         browser.close()
 
 

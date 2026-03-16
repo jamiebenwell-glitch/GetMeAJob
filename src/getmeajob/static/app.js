@@ -510,7 +510,11 @@ function setupReviewPage() {
     if (chatbotApplication) {
       chatbotApplication.value = String(index);
     }
-    writeState({ reviewSelectedResult: String(index) });
+    const selectedResult = reviewData.find((entry) => entry.index === Number(index));
+    writeState({
+      reviewSelectedResult: String(index),
+      interviewPrepApplication: selectedResult || readState().interviewPrepApplication || null,
+    });
   }
 
   function buildFallbackAssistantReply(result, question) {
@@ -830,6 +834,36 @@ function setupReviewPage() {
     }
   }
 
+  async function saveOutcomeStatus(select) {
+    const reviewId = select.dataset.reviewId || "";
+    if (!reviewId) {
+      return;
+    }
+
+    select.disabled = true;
+    select.classList.remove("is-saved");
+    select.classList.add("is-saving");
+
+    try {
+      const response = await fetch(`/api/review-runs/${encodeURIComponent(reviewId)}/outcome`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outcome_status: select.value }),
+      });
+      if (!response.ok) {
+        throw new Error("Outcome update failed.");
+      }
+      select.classList.remove("is-saving");
+      select.classList.add("is-saved");
+      window.setTimeout(() => select.classList.remove("is-saved"), 1200);
+    } catch (error) {
+      select.classList.remove("is-saving");
+      window.alert(error instanceof Error ? error.message : "Outcome update failed.");
+    } finally {
+      select.disabled = false;
+    }
+  }
+
   addButtons.forEach((button) => {
     button.addEventListener("click", () => {
       const set = createSet();
@@ -904,6 +938,17 @@ function setupReviewPage() {
     if (!(target instanceof HTMLElement)) {
       return;
     }
+    const interviewLink = target.closest(".open-interview-prep");
+    if (interviewLink instanceof HTMLAnchorElement) {
+      const applicationIndex = Number(interviewLink.dataset.applicationIndex || "0");
+      const result = reviewData.find((entry) => entry.index === applicationIndex);
+      if (result) {
+        writeState({ interviewPrepApplication: result });
+      }
+      event.preventDefault();
+      window.location.href = interviewLink.href;
+      return;
+    }
 
     if (target.classList.contains("load-draft")) {
       const kind = target.dataset.kind || "";
@@ -939,6 +984,7 @@ function setupReviewPage() {
       activeSet.scrollIntoView({ behavior: "smooth", block: "nearest" });
       persistReviewState();
     }
+
   });
 
   workspaceTabs.forEach((button) => {
@@ -964,13 +1010,21 @@ function setupReviewPage() {
 
   document.addEventListener("change", (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLSelectElement) || target.id !== "revision-select") {
+    if (!(target instanceof HTMLSelectElement)) {
       return;
     }
-    const draftId = target.dataset.draftId || "";
-    const revisionId = target.value || "";
-    if (draftId) {
-      void loadRevisionHistory(draftId, revisionId);
+
+    if (target.id === "revision-select") {
+      const draftId = target.dataset.draftId || "";
+      const revisionId = target.value || "";
+      if (draftId) {
+        void loadRevisionHistory(draftId, revisionId);
+      }
+      return;
+    }
+
+    if (target.classList.contains("history-outcome")) {
+      void saveOutcomeStatus(target);
     }
   });
 
@@ -1040,11 +1094,176 @@ function setupReviewPage() {
   }
 }
 
+function setupInterviewPrepPage() {
+  const emptyState = document.getElementById("prep-empty");
+  const loadingState = document.getElementById("prep-loading");
+  const content = document.getElementById("prep-content");
+  const sourcesList = document.getElementById("prep-sources-list");
+  const roleTitle = document.getElementById("prep-role-title");
+  const summary = document.getElementById("prep-summary");
+  const metaChips = document.getElementById("prep-meta-chips");
+  const priorities = document.getElementById("prep-priorities");
+  const stageGrid = document.getElementById("prep-stage-grid");
+  const signalGrid = document.getElementById("prep-signal-grid");
+  const questionGroups = document.getElementById("prep-question-groups");
+  const askList = document.getElementById("prep-ask-list");
+  const statMode = document.getElementById("prep-stat-mode");
+  const statCompany = document.getElementById("prep-stat-company");
+  const statStages = document.getElementById("prep-stat-stages");
+  const statQuestions = document.getElementById("prep-stat-questions");
+
+  if (!emptyState || !loadingState || !content || !sourcesList || !roleTitle || !summary || !metaChips || !priorities || !stageGrid || !signalGrid || !questionGroups || !askList || !statMode || !statCompany || !statStages || !statQuestions) {
+    return;
+  }
+
+  const stored = readState();
+  const application = stored.interviewPrepApplication;
+  if (!application || typeof application !== "object") {
+    emptyState.hidden = false;
+    loadingState.hidden = true;
+    content.hidden = true;
+    return;
+  }
+
+  function renderSources(items) {
+    if (!Array.isArray(items) || items.length === 0) {
+      sourcesList.innerHTML = '<p class="sidebar-empty">No public sources were captured for this pass.</p>';
+      return;
+    }
+    sourcesList.innerHTML = items
+      .map(
+        (item) => `
+          <article class="prep-source-card">
+            <span class="prep-source-type">${escapeHtml(String(item.source_type || "").replaceAll("_", " "))}</span>
+            <strong>${escapeHtml(item.title || "Source")}</strong>
+            <p>${escapeHtml(item.domain || "")}</p>
+            <a href="${escapeHtml(item.url || "#")}" target="_blank" rel="noopener noreferrer">Open source</a>
+          </article>
+        `
+      )
+      .join("");
+  }
+
+  function renderQuestionGroups(groups) {
+    questionGroups.innerHTML = (Array.isArray(groups) ? groups : [])
+      .map(
+        (group) => `
+          <article class="prep-question-group-card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">${escapeHtml(group.title || "Question set")}</p>
+                <h3>${escapeHtml(group.description || "")}</h3>
+              </div>
+            </div>
+            <div class="prep-question-list">
+              ${(Array.isArray(group.questions) ? group.questions : [])
+                .map(
+                  (question) => `
+                    <article class="prep-question-card">
+                      <strong>${escapeHtml(question.question || "")}</strong>
+                      <p>${escapeHtml(question.why || "")}</p>
+                      <span>${escapeHtml(question.anchor || "")}</span>
+                    </article>
+                  `
+                )
+                .join("")}
+            </div>
+          </article>
+        `
+      )
+      .join("");
+  }
+
+  async function loadPrep() {
+    emptyState.hidden = true;
+    loadingState.hidden = false;
+    content.hidden = true;
+
+    try {
+      const response = await fetch("/api/interview-prep", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ application }),
+      });
+      if (!response.ok) {
+        throw new Error("Interview prep research failed.");
+      }
+      const prep = await response.json();
+      const groups = Array.isArray(prep.question_groups) ? prep.question_groups : [];
+      const totalQuestions = groups.reduce((sum, group) => sum + ((Array.isArray(group.questions) ? group.questions.length : 0)), 0);
+      const prepCompany = String(prep.company || "Target company");
+      const prepRoleTitle = String(prep.role_title || "Selected role");
+      const displayTitle = prepRoleTitle.toLowerCase().includes(prepCompany.toLowerCase())
+        ? prepRoleTitle
+        : `${prepRoleTitle} at ${prepCompany}`;
+
+      roleTitle.textContent = displayTitle;
+      summary.textContent = prep.summary || "";
+      metaChips.innerHTML = `
+        <span>${escapeHtml(prep.research_mode || "fallback")} research</span>
+        <span>${escapeHtml(prep.research_confidence || "Low")} confidence</span>
+        <span>${escapeHtml(String((prep.sources || []).length))} sources</span>
+      `;
+      priorities.innerHTML = (prep.prep_priorities || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+      stageGrid.innerHTML = (prep.process_stages || [])
+        .map(
+          (stage) => `
+            <article class="prep-stage-card">
+              <div class="prep-stage-head">
+                <strong>${escapeHtml(stage.name || "")}</strong>
+                <span>${escapeHtml(stage.confidence || "")}</span>
+              </div>
+              <p>${escapeHtml(stage.detail || "")}</p>
+              <a href="${escapeHtml(stage.source_url || "#")}" ${stage.source_url ? 'target="_blank" rel="noopener noreferrer"' : 'aria-disabled="true"'}>${escapeHtml(stage.source_title || "Role inference")}</a>
+            </article>
+          `
+        )
+        .join("");
+      signalGrid.innerHTML = (prep.company_signals || [])
+        .map(
+          (signal) => `
+            <article class="prep-signal-card">
+              <strong>${escapeHtml(signal.title || "")}</strong>
+              <p>${escapeHtml(signal.detail || "")}</p>
+              <a href="${escapeHtml(signal.source_url || "#")}" ${signal.source_url ? 'target="_blank" rel="noopener noreferrer"' : 'aria-disabled="true"'}>${escapeHtml(signal.source_title || "Job advert")}</a>
+            </article>
+          `
+        )
+        .join("");
+      renderQuestionGroups(groups);
+      askList.innerHTML = (prep.questions_to_ask || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+      renderSources(prep.sources || []);
+
+      statMode.textContent = String(prep.research_mode || "fallback").replaceAll("_", " ");
+      statCompany.textContent = prepCompany;
+      statStages.textContent = String((prep.process_stages || []).length);
+      statQuestions.textContent = String(totalQuestions);
+
+      loadingState.hidden = true;
+      content.hidden = false;
+    } catch (error) {
+      loadingState.hidden = true;
+      emptyState.hidden = false;
+      content.hidden = true;
+      emptyState.innerHTML = `
+        <h3>Interview prep could not be loaded</h3>
+        <p>${escapeHtml(error instanceof Error ? error.message : "The company research step failed.")}</p>
+      `;
+    }
+  }
+
+  void loadPrep();
+}
+
 if (page() === "jobs") {
   setupJobsPage();
 }
 
 if (page() === "review") {
   setupReviewPage();
+}
+
+if (page() === "interview-prep") {
+  setupInterviewPrepPage();
 }
 

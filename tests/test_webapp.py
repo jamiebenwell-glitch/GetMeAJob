@@ -49,6 +49,14 @@ def test_jobs_page_renders_separately_from_review(client: TestClient) -> None:
     assert "Saved work" not in response.text
 
 
+def test_interview_prep_page_renders_shell(client: TestClient) -> None:
+    response = client.get("/interview-prep")
+    assert response.status_code == 200
+    assert "Turn the reviewed application into a company-specific interview plan." in response.text
+    assert "Research Sources" in response.text
+    assert "Questions to Expect" in response.text
+
+
 def test_review_page_renders_guest_workspace(client: TestClient) -> None:
     response = client.get("/review")
     assert response.status_code == 200
@@ -64,6 +72,7 @@ def test_review_page_renders_guest_workspace(client: TestClient) -> None:
     assert "Google sign-in is ready in the app" in response.text
     assert "/auth/google/callback" in response.text
     assert "Score trend" in response.text
+    assert "Reusable proof points" in response.text
 
 
 def test_auth_status_reports_missing_google_config(client: TestClient) -> None:
@@ -113,6 +122,38 @@ def test_review_assistant_endpoint_returns_grounded_answer(client: TestClient) -
 
     assert response.status_code == 200
     assert "In your cover letter you wrote" in response.json()["answer"]
+
+
+def test_interview_prep_endpoint_returns_grounded_payload(client: TestClient) -> None:
+    response = client.post(
+        "/api/interview-prep",
+        json={
+            "application": {
+                "job": "Mechanical engineering placement at Acme. Need CAD, manufacturing, testing, and analysis.",
+                "job_url": "",
+                "profile": "Mechanical Engineering",
+                "requirement_evidence": [
+                    {
+                        "requirement": "Analysis",
+                        "status": "missing",
+                        "target_line": "Need CAD, manufacturing, testing, and analysis.",
+                        "cv_evidence": [],
+                        "cover_evidence": [],
+                    }
+                ],
+                "interview_questions": [
+                    "Tell me about a time you used testing to improve a design decision."
+                ],
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["company"] == "Acme"
+    assert len(payload["process_stages"]) >= 3
+    assert len(payload["question_groups"]) == 3
+    assert len(payload["questions_to_ask"]) >= 2
 
 
 def test_signed_in_user_can_save_drafts(client: TestClient) -> None:
@@ -308,6 +349,11 @@ def test_review_submission_saves_history_for_signed_in_user(client: TestClient) 
     assert 'id="history-chart"' in response.text
     assert "Next improvements" in response.text
     assert "What to change in your wording" in response.text
+    assert "Hiring Manager View" in response.text
+    assert "Requirement to evidence" in response.text
+    assert "Parser checks" in response.text
+    assert "Questions before rewriting" in response.text
+    assert "Questions you should be ready for" in response.text
     assert "You wrote" in response.text
     assert "Try adding" in response.text
     assert "CV markup" not in response.text
@@ -319,6 +365,55 @@ def test_review_submission_saves_history_for_signed_in_user(client: TestClient) 
     assert review_page.status_code == 200
     assert "Mechanical engineering placement at Acme" in review_page.text
     assert "Open review" in review_page.text
+    assert "Reusable proof points" in review_page.text
+
+
+def test_review_outcome_endpoint_updates_status(client: TestClient) -> None:
+    client.get("/test/login", follow_redirects=False)
+
+    client.post(
+        "/review",
+        data={
+            "job": "Mechanical engineering placement at Acme. Need CAD, manufacturing, testing, and analysis.",
+            "job_url": "",
+            "cv_text": "Mechanical engineering student with CAD, prototype testing, and manufacturing project work. Improved setup time by 15%.",
+            "cover_text": "I want to join Acme for this placement and can support CAD, testing, and manufacturing delivery.",
+            "cv_draft_title": "Main CV",
+            "cover_draft_title": "Main Cover Letter",
+            "cv_draft_id": "",
+            "cover_draft_id": "",
+        },
+    )
+
+    response = client.post("/api/review-runs/1/outcome", json={"outcome_status": "interview"})
+    assert response.status_code == 200
+    assert response.json()["outcome_status"] == "interview"
+
+    review_page = client.get("/review")
+    assert 'option value="interview" selected' in review_page.text
+
+
+def test_signed_in_review_populates_evidence_bank(client: TestClient) -> None:
+    client.get("/test/login", follow_redirects=False)
+
+    client.post(
+        "/review",
+        data={
+            "job": "Mechanical engineering placement at Acme. Need CAD, manufacturing, testing, and analysis.",
+            "job_url": "",
+            "cv_text": "Mechanical engineering student with CAD, prototype testing, and manufacturing project work. Improved setup time by 15%.",
+            "cover_text": "I want to join Acme for this placement and can support CAD, testing, and manufacturing delivery.",
+            "cv_draft_title": "Main CV",
+            "cover_draft_title": "Main Cover Letter",
+            "cv_draft_id": "",
+            "cover_draft_id": "",
+        },
+    )
+
+    review_page = client.get("/review")
+    assert review_page.status_code == 200
+    assert "Reusable proof points" in review_page.text
+    assert "prototype testing" in review_page.text or "manufacturing project work" in review_page.text
 
 
 def test_signed_in_user_can_reopen_saved_review(client: TestClient) -> None:
@@ -375,6 +470,14 @@ def test_signed_in_user_can_open_legacy_saved_review_without_snapshot(client: Te
     assert "Legacy Mechanical Role" in history_page.text
     assert "This saved review was created before full snapshot storage was enabled." in history_page.text
     assert "71%" in history_page.text
+
+
+def test_init_db_does_not_leave_locked_database_file(tmp_path: Path) -> None:
+    db_path = tmp_path / "lock-check.db"
+    storage.DB_PATH = db_path
+    storage.init_db()
+    db_path.unlink()
+    assert not db_path.exists()
 
 
 def test_review_submission_still_returns_results_if_history_write_fails(

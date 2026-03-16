@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-intro prep-intro">
+  <div class="page-intro-copy">
+    <p class="eyebrow">Interview Prep</p>
+    <h1>Turn the reviewed application into a company-specific interview plan.</h1>
+    <p class="lead">
+      Research the company, look for public interview-process signals, and get questions that connect the role, the company, and your own CV evidence.
+    </p>
+    <div class="hero-steps intro-chips">
+      <span>Official-source first research</span>
+      <span>Role-specific questions</span>
+      <span>Grounded in your reviewed application</span>
+    </div>
+  </div>
+  <div class="intro-stats-grid">
+    <article class="hero-stat stat-card-accent">
+      <span>Research mode</span>
+      <strong id="prep-stat-mode">Waiting</strong>
+    </article>
+    <article class="hero-stat">
+      <span>Company</span>
+      <strong id="prep-stat-company">Not loaded</strong>
+    </article>
+    <article class="hero-stat">
+      <span>Stages</span>
+      <strong id="prep-stat-stages">0</strong>
+    </article>
+    <article class="hero-stat">
+      <span>Questions</span>
+      <strong id="prep-stat-questions">0</strong>
+    </article>
+  </div>
+</section>
+
+<div class="prep-layout">
+  <aside class="panel prep-sidebar">
+    <section class="panel sidebar-panel prep-note-panel">
+      <div class="panel-head compact-head">
+        <div>
+          <p class="eyebrow">How to use this</p>
+          <h2>Next step after review</h2>
+        </div>
+      </div>
+      <ol class="compact-steps">
+        <li>Open this page from a reviewed application.</li>
+        <li>Read the likely interview flow and company signals first.</li>
+        <li>Prepare one strong answer per weak requirement before rehearsing the rest.</li>
+      </ol>
+      <div class="account-actions">
+        <a class="secondary" href="/review">Back to review</a>
+      </div>
+    </section>
+
+    <section class="panel sidebar-panel prep-sources-panel">
+      <div class="panel-head compact-head">
+        <div>
+          <p class="eyebrow">Research Sources</p>
+          <h3>What this prep is based on</h3>
+        </div>
+      </div>
+      <div id="prep-sources-list" class="prep-sources-list">
+        <p class="sidebar-empty">Open interview prep from a reviewed application to load company-specific sources.</p>
+      </div>
+    </section>
+  </aside>
+
+  <section class="panel prep-workspace">
+    <div id="prep-empty" class="panel-empty-state">
+      <h3>No reviewed application selected</h3>
+      <p>Run a review first, then use <strong>Interview prep</strong> from the scored application you want to prepare for.</p>
+    </div>
+
+    <div id="prep-loading" class="prep-loading" hidden>
+      <div class="prep-loading-card">
+        <strong>Researching the company and interview flow...</strong>
+        <p>Pulling together official company signals, role-specific themes, and grounded interview questions.</p>
+      </div>
+    </div>
+
+    <div id="prep-content" hidden>
+      <section class="prep-overview-grid">
+        <article class="prep-hero-card">
+          <p class="eyebrow">Interview Plan</p>
+          <h2 id="prep-role-title">Selected role</h2>
+          <p id="prep-summary" class="prep-summary"></p>
+          <div id="prep-meta-chips" class="prep-meta-chips"></div>
+        </article>
+
+        <article class="notes-panel prep-priorities-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Prep Priorities</p>
+              <h3>What to prepare first</h3>
+            </div>
+          </div>
+          <ol id="prep-priorities" class="action-list"></ol>
+        </article>
+      </section>
+
+      <section class="notes-panel prep-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Likely Interview Flow</p>
+            <h3>What the process probably looks like</h3>
+          </div>
+        </div>
+        <div id="prep-stage-grid" class="prep-stage-grid"></div>
+      </section>
+
+      <section class="notes-panel prep-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Company Signals</p>
+            <h3>What this company seems to care about</h3>
+          </div>
+        </div>
+        <div id="prep-signal-grid" class="prep-signal-grid"></div>
+      </section>
+
+      <section class="notes-panel prep-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Questions to Expect</p>
+            <h3>Question sets to rehearse</h3>
+          </div>
+        </div>
+        <div id="prep-question-groups" class="prep-question-groups"></div>
+      </section>
+
+      <section class="notes-panel prep-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Questions to Ask Them</p>
+            <h3>Good questions for the end of the interview</h3>
+          </div>
+        </div>
+        <ol id="prep-ask-list" class="action-list"></ol>
+      </section>
+    </div>
+  </section>
+</div>
+{% endblock %}

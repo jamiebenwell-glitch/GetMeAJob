@@ -4,6 +4,10 @@ from getmeajob.reviewer import review
 from tests.reviewer_case_data import REVIEWER_CASES
 
 
+def test_reviewer_benchmark_has_milestone_depth() -> None:
+    assert len(REVIEWER_CASES) >= 100
+
+
 @pytest.mark.parametrize("case", REVIEWER_CASES, ids=[case["name"] for case in REVIEWER_CASES])
 def test_reviewer_benchmark_cases(case: dict[str, object]) -> None:
     result = review(str(case["job"]), str(case["cv"]), str(case["cover"]))

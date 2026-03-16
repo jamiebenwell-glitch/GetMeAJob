@@ -158,14 +158,50 @@ class RequirementCategory:
 
 
 @dataclass(frozen=True)
+class RequirementEvidence:
+    requirement: str
+    priority: str
+    status: str
+    cv_evidence: list[str]
+    cover_evidence: list[str]
+    target_line: str
+
+
+@dataclass(frozen=True)
+class ReviewVerdict:
+    label: str
+    confidence: str
+    rationale: str
+
+
+@dataclass(frozen=True)
+class AtsCheck:
+    name: str
+    status: str
+    note: str
+
+
+@dataclass(frozen=True)
+class AtsDiagnostics:
+    score: int
+    checks: list["AtsCheck"]
+
+
+@dataclass(frozen=True)
 class ReviewResult:
     score: ReviewScore
+    profile: str
+    verdict: ReviewVerdict
     notes: list[str]
     keyword_overlap: list[str]
     missing_keywords: list[str]
     cv_highlights: list[Highlight]
     cover_highlights: list[Highlight]
     tailored_advice: list["TailoredAdvice"]
+    requirement_evidence: list["RequirementEvidence"]
+    ats_diagnostics: AtsDiagnostics
+    follow_up_questions: list[str]
+    interview_questions: list[str]
     categories: list[RequirementCategory]
 
 
@@ -699,6 +735,223 @@ def _cover_only_requirement_gaps(job_text: str, cv_text: str, cover_text: str, l
     return gaps
 
 
+def _evidence_segments(text: str, concept: str, limit: int = 2) -> list[str]:
+    segments = []
+    for segment in _split_segments(text):
+        concepts = _extract_concepts(segment)
+        if concepts.get(concept, 0) > 0:
+            segments.append(segment)
+        if len(segments) >= limit:
+            break
+    return segments
+
+
+def _requirement_status(cv_strength: float, cover_strength: float) -> str:
+    if cv_strength >= 0.7:
+        return "strong"
+    if cv_strength > MATCH_DISPLAY_THRESHOLD or (cv_strength > 0 and cover_strength > MATCH_DISPLAY_THRESHOLD):
+        return "weak"
+    if cover_strength > MATCH_DISPLAY_THRESHOLD:
+        return "cover_only"
+    return "missing"
+
+
+def _build_requirement_evidence(job_text: str, cv_text: str, cover_text: str, limit: int = 10) -> list[RequirementEvidence]:
+    requirements = sorted(_build_requirement_map(job_text).values(), key=lambda item: (-item.weight, item.concept))
+    cv_profile = _candidate_concept_strength(cv_text, cover_bonus=0.0)
+    cover_profile = _candidate_concept_strength(cover_text, cover_bonus=-0.04)
+    evidence: list[RequirementEvidence] = []
+
+    for signal in requirements:
+        if len(evidence) >= limit:
+            break
+        cv_strength = cv_profile.get(signal.concept, 0.0)
+        cover_strength = cover_profile.get(signal.concept, 0.0)
+        evidence.append(
+            RequirementEvidence(
+                requirement=_concept_label(signal.concept),
+                priority=signal.priority,
+                status=_requirement_status(cv_strength, cover_strength),
+                cv_evidence=_evidence_segments(cv_text, signal.concept),
+                cover_evidence=_evidence_segments(cover_text, signal.concept),
+                target_line=signal.source_line,
+            )
+        )
+    return evidence
+
+
+def _detect_review_profile(job_text: str) -> str:
+    families = _dominant_families(job_text)
+    title = _split_segments(job_text)[0].lower() if _split_segments(job_text) else job_text.lower()
+    if "aerospace" in title or "avionics" in title:
+        return "Aerospace Engineering"
+    if "automotive" in title:
+        return "Automotive Engineering"
+    if "manufacturing" in title or "production" in title:
+        return "Manufacturing Engineering"
+    if "mechanical" in title or "design engineer" in title or "cad" in title:
+        return "Mechanical Engineering"
+    if "software" in title or "backend" in title or "frontend" in title:
+        return "Software Engineering"
+    if "embedded" in title or "firmware" in title or "electrical" in title:
+        return "Embedded / Electrical Engineering"
+    if "data" in title or "analyst" in title:
+        return "Data and Analytics"
+    if "civil" in title or "structural" in title:
+        return "Civil Engineering"
+    if "software" in families:
+        return "Software Engineering"
+    if "mechanical" in families:
+        return "Mechanical Engineering"
+    if "electrical" in families:
+        return "Embedded / Electrical Engineering"
+    if "data" in families:
+        return "Data and Analytics"
+    return "General Engineering"
+
+
+def _ats_section_check(cv_text: str) -> AtsCheck:
+    headings = sum(
+        1
+        for line in cv_text.splitlines()
+        if line.strip().lower() in {"education", "experience", "projects", "skills", "employment", "profile", "summary"}
+    )
+    if headings >= 2:
+        return AtsCheck("Section recognition", "pass", "The CV has recognisable section headings for ATS parsing.")
+    if headings == 1:
+        return AtsCheck("Section recognition", "warn", "The CV has limited section headings. Add clearer labels like Education, Experience, Projects, and Skills.")
+    return AtsCheck("Section recognition", "warn", "The CV does not expose clear section headings, which can make ATS parsing weaker.")
+
+
+def _ats_date_check(cv_text: str) -> AtsCheck:
+    has_dates = bool(
+        re.search(
+            r"(?i)\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{4}\b|\b20\d{2}\b|\b\d{4}\s*[-/]\s*(?:present|20\d{2})",
+            cv_text,
+        )
+    )
+    if has_dates:
+        return AtsCheck("Date coverage", "pass", "The CV includes date patterns that ATS systems can usually map to experience timelines.")
+    return AtsCheck("Date coverage", "warn", "The CV is missing clear date ranges. Add months or years to experience and education entries.")
+
+
+def _ats_contact_check(cv_text: str) -> AtsCheck:
+    has_email = bool(re.search(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", cv_text, re.I))
+    has_phone = bool(re.search(r"(?:\+?\d[\d\s().-]{8,}\d)", cv_text))
+    if has_email and has_phone:
+        return AtsCheck("Contact parse", "pass", "The CV exposes email and phone information in ATS-friendly text.")
+    if has_email or has_phone:
+        return AtsCheck("Contact parse", "warn", "One core contact field is missing from the extracted text. Keep both email and phone in plain text.")
+    return AtsCheck("Contact parse", "warn", "Contact details were not obvious in the extracted text.")
+
+
+def _ats_noise_check(text: str) -> AtsCheck:
+    weird_chars = len(re.findall(r"[�■□▪•◦¤]", text))
+    if weird_chars == 0:
+        return AtsCheck("Extraction noise", "pass", "The extracted text looks clean.")
+    if weird_chars <= 3:
+        return AtsCheck("Extraction noise", "warn", "A small amount of extraction noise was found. Check the uploaded formatting.")
+    return AtsCheck("Extraction noise", "fail", "The uploaded document appears to contain extraction noise that could confuse ATS parsing.")
+
+
+def _ats_bullet_check(cv_text: str) -> AtsCheck:
+    segments = _split_segments(cv_text)
+    if len(segments) >= 8:
+        return AtsCheck("Content structure", "pass", "The CV has enough separable lines or bullets to scan cleanly.")
+    if len(segments) >= 4:
+        return AtsCheck("Content structure", "warn", "The CV is readable, but more clearly separated bullets would improve ATS and recruiter scanning.")
+    return AtsCheck("Content structure", "warn", "The CV reads as a dense block. Break experience into more scan-friendly bullets.")
+
+
+def _build_ats_diagnostics(cv_text: str, cover_text: str) -> AtsDiagnostics:
+    checks = [
+        _ats_section_check(cv_text),
+        _ats_date_check(cv_text),
+        _ats_contact_check(cv_text),
+        _ats_noise_check(cv_text + "\n" + cover_text),
+        _ats_bullet_check(cv_text),
+    ]
+    weights = {"pass": 20, "warn": 12, "fail": 5}
+    score = int(round(sum(weights[item.status] for item in checks) / (len(checks) * 20) * 100))
+    return AtsDiagnostics(score=max(20, min(score, 100)), checks=checks)
+
+
+def _build_follow_up_questions(
+    requirement_evidence: list[RequirementEvidence],
+    ats_diagnostics: AtsDiagnostics,
+) -> list[str]:
+    questions: list[str] = []
+    for item in requirement_evidence:
+        if item.status == "missing":
+            questions.append(f"Do you have any real example of {item.requirement} that is not yet in the CV or cover letter?")
+        elif item.status == "cover_only":
+            questions.append(f"Where in your CV can you prove {item.requirement}, rather than only claiming it in the cover letter?")
+        if len(questions) >= 4:
+            break
+    for check in ats_diagnostics.checks:
+        if check.status != "pass" and len(questions) < 6:
+            questions.append(f"Can you strengthen this ATS area: {check.name.lower()}?")
+    return questions[:6]
+
+
+def _build_interview_questions(
+    requirement_evidence: list[RequirementEvidence],
+    keyword_overlap: list[str],
+    missing_keywords: list[str],
+) -> list[str]:
+    questions: list[str] = []
+    for item in requirement_evidence:
+        if item.status in {"missing", "cover_only"}:
+            questions.append(f"Tell me about a time you used {item.requirement}, and what result you achieved.")
+        elif item.status == "strong":
+            questions.append(f"Walk me through your strongest example of {item.requirement}. What did you own personally?")
+        if len(questions) >= 4:
+            break
+    if len(questions) < 4 and keyword_overlap:
+        questions.append(f"Which project best proves your {keyword_overlap[0]} experience?")
+    if len(questions) < 4 and missing_keywords:
+        questions.append(f"How would you close the gap on {missing_keywords[0]} if you started this role?")
+    return questions[:4]
+
+
+def _build_verdict(
+    score: ReviewScore,
+    requirement_evidence: list[RequirementEvidence],
+    ats_diagnostics: AtsDiagnostics,
+    fit_notes: list[str],
+) -> ReviewVerdict:
+    missing_count = sum(1 for item in requirement_evidence if item.status == "missing")
+    cover_only_count = sum(1 for item in requirement_evidence if item.status == "cover_only")
+
+    if score.total >= 78 and missing_count <= 2 and cover_only_count == 0:
+        label = "Strong shortlist candidate"
+    elif score.total >= 60 and missing_count <= 4:
+        label = "Viable with stronger evidence"
+    elif any("different disciplines" in note.lower() or "senior" in note.lower() for note in fit_notes):
+        label = "Role mismatch"
+    else:
+        label = "Needs major retargeting"
+
+    if ats_diagnostics.score >= 80 and cover_only_count == 0 and missing_count <= 2:
+        confidence = "High confidence"
+    elif ats_diagnostics.score >= 60 and missing_count <= 4:
+        confidence = "Medium confidence"
+    else:
+        confidence = "Low confidence"
+
+    rationale_parts = []
+    if fit_notes:
+        rationale_parts.append(fit_notes[0])
+    if cover_only_count:
+        rationale_parts.append("Several claims sit in the cover letter without equivalent CV evidence.")
+    elif missing_count:
+        rationale_parts.append("Some important requirements still lack clear evidence.")
+    else:
+        rationale_parts.append("The application evidence maps reasonably well to the advert.")
+
+    return ReviewVerdict(label=label, confidence=confidence, rationale=" ".join(rationale_parts[:2]))
+
+
 def _build_highlights(text: str, job_text: str, start_id: int, doc_name: str) -> list[Highlight]:
     highlights: list[Highlight] = []
     segments = _split_segments(text)
@@ -872,6 +1125,7 @@ def review(job_text: str, cv_text: str, cover_text: str) -> ReviewResult:
     specificity = _score_specificity(cv_text, cover_text)
     structure = _score_structure(cv_text, cover_text)
     clarity = _score_clarity([cv_text, cover_text])
+    profile = _detect_review_profile(job_text)
     total_cap, relevance_cap, fit_notes = _fit_caps(job_text, cv_text, cover_text)
     cover_only_gaps = _cover_only_requirement_gaps(job_text, cv_text, cover_text)
 
@@ -907,15 +1161,31 @@ def review(job_text: str, cv_text: str, cover_text: str) -> ReviewResult:
     cv_highlights = _build_highlights(cv_text, job_text, 1, "CV")
     cover_highlights = _build_highlights(cover_text, job_text, 101, "Cover letter")
     tailored_advice = _build_tailored_advice(job_text, cv_text, cover_text, cv_highlights, cover_highlights)
+    requirement_evidence = _build_requirement_evidence(job_text, cv_text, cover_text)
+    ats_diagnostics = _build_ats_diagnostics(cv_text, cover_text)
+    follow_up_questions = _build_follow_up_questions(requirement_evidence, ats_diagnostics)
+    interview_questions = _build_interview_questions(requirement_evidence, overlap, missing)
+    verdict = _build_verdict(
+        ReviewScore(total=total, relevance=relevance, tailoring=tailoring, specificity=specificity, structure=structure, clarity=clarity),
+        requirement_evidence,
+        ats_diagnostics,
+        fit_notes,
+    )
 
     return ReviewResult(
         score=ReviewScore(total=total, relevance=relevance, tailoring=tailoring, specificity=specificity, structure=structure, clarity=clarity),
+        profile=profile,
+        verdict=verdict,
         notes=notes,
         keyword_overlap=overlap,
         missing_keywords=missing,
         cv_highlights=cv_highlights,
         cover_highlights=cover_highlights,
         tailored_advice=tailored_advice,
+        requirement_evidence=requirement_evidence,
+        ats_diagnostics=ats_diagnostics,
+        follow_up_questions=follow_up_questions,
+        interview_questions=interview_questions,
         categories=categories,
     )
 
@@ -927,12 +1197,21 @@ def review_from_files(job_path: str, cv_path: str, cover_path: str) -> ReviewRes
 def to_json(result: ReviewResult) -> str:
     payload = {
         "score": result.score.__dict__,
+        "profile": result.profile,
+        "verdict": result.verdict.__dict__,
         "notes": result.notes,
         "keyword_overlap": result.keyword_overlap,
         "missing_keywords": result.missing_keywords,
         "cv_highlights": [highlight.__dict__ for highlight in result.cv_highlights],
         "cover_highlights": [highlight.__dict__ for highlight in result.cover_highlights],
         "tailored_advice": [advice.__dict__ for advice in result.tailored_advice],
+        "requirement_evidence": [item.__dict__ for item in result.requirement_evidence],
+        "ats_diagnostics": {
+            "score": result.ats_diagnostics.score,
+            "checks": [item.__dict__ for item in result.ats_diagnostics.checks],
+        },
+        "follow_up_questions": result.follow_up_questions,
+        "interview_questions": result.interview_questions,
         "categories": [category.__dict__ for category in result.categories],
     }
     return json.dumps(payload, indent=2, ensure_ascii=False)

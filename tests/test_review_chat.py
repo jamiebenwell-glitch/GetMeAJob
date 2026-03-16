@@ -17,6 +17,9 @@ def _application_payload() -> dict[str, object]:
         "keyword_overlap": result.keyword_overlap,
         "categories": [item.__dict__ for item in result.categories],
         "tailored_advice": [item.__dict__ for item in result.tailored_advice],
+        "requirement_evidence": [item.__dict__ for item in result.requirement_evidence],
+        "follow_up_questions": result.follow_up_questions,
+        "interview_questions": result.interview_questions,
         "role_suggestions": [],
     }
 
@@ -35,3 +38,32 @@ def test_review_chat_explains_experience_to_add() -> None:
 
     assert "Add explicit evidence" in reply or "expand" in reply
     assert any(keyword in reply.lower() for keyword in ("analysis", "manufacturing", "testing"))
+
+
+def test_review_chat_explains_requirement_map() -> None:
+    payload = _application_payload()
+    reply = answer_review_question(payload, "Show me the requirement map")
+
+    assert "currently" in reply
+    assert "CV evidence" in reply
+
+
+def test_review_chat_returns_follow_up_questions() -> None:
+    payload = _application_payload()
+    reply = answer_review_question(payload, "What else do you need from me?")
+
+    assert "The next factual questions to answer are" in reply
+
+
+def test_review_chat_returns_interview_handoff() -> None:
+    payload = _application_payload()
+    reply = answer_review_question(payload, "What interview questions will they ask?")
+
+    assert "Likely interview probes" in reply
+
+
+def test_review_chat_uses_truth_preserving_rewrite_path() -> None:
+    payload = _application_payload()
+    reply = answer_review_question(payload, "Rewrite this CV bullet")
+
+    assert "Keep the truth of" in reply

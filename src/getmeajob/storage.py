@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from contextlib import contextmanager
 from pathlib import Path
 import json
 import os
@@ -48,8 +49,18 @@ REQUIRED_COLUMNS: dict[str, dict[str, str]] = {
         "cover_draft_id": "INTEGER",
         "cv_title": "TEXT NOT NULL DEFAULT ''",
         "cover_title": "TEXT NOT NULL DEFAULT ''",
+        "outcome_status": "TEXT NOT NULL DEFAULT 'not_set'",
         "application_payload": "TEXT NOT NULL DEFAULT ''",
         "created_at": "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+    },
+    "evidence_bank": {
+        "user_id": "INTEGER NOT NULL DEFAULT 0",
+        "source_review_id": "INTEGER",
+        "title": "TEXT NOT NULL DEFAULT ''",
+        "excerpt": "TEXT NOT NULL DEFAULT ''",
+        "tags_json": "TEXT NOT NULL DEFAULT '[]'",
+        "created_at": "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+        "updated_at": "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
     },
 }
 
@@ -59,6 +70,19 @@ def _connection() -> sqlite3.Connection:
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
     return connection
+
+
+@contextmanager
+def _managed_connection() -> sqlite3.Connection:
+    connection = _connection()
+    try:
+        yield connection
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
 
 
 def _table_columns(connection: sqlite3.Connection, table_name: str) -> set[str]:
@@ -76,7 +100,7 @@ def _ensure_required_columns(connection: sqlite3.Connection) -> None:
 
 
 def init_db() -> None:
-    with _connection() as connection:
+    with _managed_connection() as connection:
         connection.executescript(
             """
             CREATE TABLE IF NOT EXISTS users (
@@ -123,10 +147,25 @@ def init_db() -> None:
                 cover_draft_id INTEGER,
                 cv_title TEXT NOT NULL DEFAULT '',
                 cover_title TEXT NOT NULL DEFAULT '',
+                outcome_status TEXT NOT NULL DEFAULT 'not_set',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(user_id) REFERENCES users(id),
                 FOREIGN KEY(cv_draft_id) REFERENCES document_drafts(id),
                 FOREIGN KEY(cover_draft_id) REFERENCES document_drafts(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS evidence_bank (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                source_review_id INTEGER,
+                title TEXT NOT NULL DEFAULT '',
+                excerpt TEXT NOT NULL,
+                tags_json TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, excerpt),
+                FOREIGN KEY(user_id) REFERENCES users(id),
+                FOREIGN KEY(source_review_id) REFERENCES review_runs(id)
             );
             """
         )
@@ -140,7 +179,7 @@ def _row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
 
 
 def upsert_user(google_sub: str, email: str, name: str, picture: str = "") -> dict[str, Any]:
-    with _connection() as connection:
+    with _managed_connection() as connection:
         connection.execute(
             """
             INSERT INTO users (google_sub, email, name, picture)
@@ -158,13 +197,13 @@ def upsert_user(google_sub: str, email: str, name: str, picture: str = "") -> di
 
 
 def get_user(user_id: int) -> dict[str, Any] | None:
-    with _connection() as connection:
+    with _managed_connection() as connection:
         row = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     return _row_to_dict(row)
 
 
 def list_drafts(user_id: int, kind: str | None = None) -> list[dict[str, Any]]:
-    with _connection() as connection:
+    with _managed_connection() as connection:
         if kind:
             rows = connection.execute(
                 """
@@ -187,7 +226,7 @@ def list_drafts(user_id: int, kind: str | None = None) -> list[dict[str, Any]]:
 
 
 def get_draft(user_id: int, draft_id: int) -> dict[str, Any] | None:
-    with _connection() as connection:
+    with _managed_connection() as connection:
         row = connection.execute(
             "SELECT * FROM document_drafts WHERE id = ? AND user_id = ?",
             (draft_id, user_id),
@@ -198,7 +237,7 @@ def get_draft(user_id: int, draft_id: int) -> dict[str, Any] | None:
 def save_draft(user_id: int, kind: str, title: str, content: str, draft_id: int | None = None) -> dict[str, Any]:
     cleaned_title = title.strip() or f"Untitled {kind.replace('_', ' ')} draft"
     cleaned_content = content.strip()
-    with _connection() as connection:
+    with _managed_connection() as connection:
         if draft_id:
             existing = connection.execute(
                 "SELECT * FROM document_drafts WHERE id = ? AND user_id = ? AND kind = ?",
@@ -238,7 +277,7 @@ def save_draft(user_id: int, kind: str, title: str, content: str, draft_id: int 
 
 
 def list_revisions(user_id: int, draft_id: int) -> list[dict[str, Any]]:
-    with _connection() as connection:
+    with _managed_connection() as connection:
         row = connection.execute(
             "SELECT id FROM document_drafts WHERE id = ? AND user_id = ?",
             (draft_id, user_id),
@@ -258,7 +297,7 @@ def list_revisions(user_id: int, draft_id: int) -> list[dict[str, Any]]:
 
 
 def get_revision(user_id: int, draft_id: int, revision_id: int) -> dict[str, Any] | None:
-    with _connection() as connection:
+    with _managed_connection() as connection:
         row = connection.execute(
             """
             SELECT revision.id, revision.draft_id, revision.content, revision.created_at
@@ -282,7 +321,7 @@ def create_review_run(
     cover_title: str,
     application_payload: dict[str, Any],
 ) -> dict[str, Any]:
-    with _connection() as connection:
+    with _managed_connection() as connection:
         cursor = connection.execute(
             """
             INSERT INTO review_runs (
@@ -299,9 +338,10 @@ def create_review_run(
                 cover_draft_id,
                 cv_title,
                 cover_title,
+                outcome_status,
                 application_payload
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 user_id,
@@ -317,6 +357,7 @@ def create_review_run(
                 cover_draft_id,
                 cv_title.strip(),
                 cover_title.strip(),
+                "not_set",
                 json.dumps(application_payload),
             ),
         )
@@ -325,7 +366,7 @@ def create_review_run(
 
 
 def get_review_run(user_id: int, review_id: int) -> dict[str, Any] | None:
-    with _connection() as connection:
+    with _managed_connection() as connection:
         row = connection.execute(
             """
             SELECT *
@@ -349,7 +390,7 @@ def get_review_run(user_id: int, review_id: int) -> dict[str, Any] | None:
 
 
 def list_review_history(user_id: int, limit: int = 20) -> list[dict[str, Any]]:
-    with _connection() as connection:
+    with _managed_connection() as connection:
         rows = connection.execute(
             """
             SELECT *
@@ -367,6 +408,106 @@ def list_review_history(user_id: int, limit: int = 20) -> list[dict[str, Any]]:
         item["score_delta"] = None if previous_score is None else current_score - previous_score
         previous_score = current_score
     return history
+
+
+def update_review_outcome(user_id: int, review_id: int, outcome_status: str) -> dict[str, Any] | None:
+    if outcome_status not in {"not_set", "applied", "interview", "reject", "offer"}:
+        raise ValueError("Invalid outcome status.")
+    with _managed_connection() as connection:
+        connection.execute(
+            """
+            UPDATE review_runs
+            SET outcome_status = ?
+            WHERE id = ? AND user_id = ?
+            """,
+            (outcome_status, review_id, user_id),
+        )
+        row = connection.execute("SELECT * FROM review_runs WHERE id = ? AND user_id = ?", (review_id, user_id)).fetchone()
+    return _row_to_dict(row)
+
+
+def review_outcome_summary(user_id: int) -> dict[str, int]:
+    with _managed_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT outcome_status, COUNT(*) AS total
+            FROM review_runs
+            WHERE user_id = ?
+            GROUP BY outcome_status
+            """,
+            (user_id,),
+        ).fetchall()
+    summary = {"applied": 0, "interview": 0, "reject": 0, "offer": 0}
+    for row in rows:
+        status = str(row["outcome_status"] or "")
+        if status in summary:
+            summary[status] = int(row["total"])
+    return summary
+
+
+def upsert_evidence_item(
+    user_id: int,
+    title: str,
+    excerpt: str,
+    tags: list[str],
+    source_review_id: int | None = None,
+) -> dict[str, Any] | None:
+    cleaned_excerpt = excerpt.strip()
+    if not cleaned_excerpt:
+        return None
+    payload = json.dumps(tags)
+    with _managed_connection() as connection:
+        existing = connection.execute(
+            "SELECT * FROM evidence_bank WHERE user_id = ? AND excerpt = ?",
+            (user_id, cleaned_excerpt),
+        ).fetchone()
+        if existing is None:
+            cursor = connection.execute(
+                """
+                INSERT INTO evidence_bank (user_id, source_review_id, title, excerpt, tags_json)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (user_id, source_review_id, title.strip(), cleaned_excerpt, payload),
+            )
+            row = connection.execute("SELECT * FROM evidence_bank WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        else:
+            connection.execute(
+                """
+                UPDATE evidence_bank
+                SET title = ?, tags_json = ?, source_review_id = COALESCE(?, source_review_id), updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (title.strip(), payload, source_review_id, existing["id"]),
+            )
+            row = connection.execute("SELECT * FROM evidence_bank WHERE id = ?", (existing["id"],)).fetchone()
+    item = _row_to_dict(row)
+    if item is not None:
+        try:
+            item["tags"] = json.loads(str(item.get("tags_json") or "[]"))
+        except json.JSONDecodeError:
+            item["tags"] = []
+    return item
+
+
+def list_evidence_bank(user_id: int, limit: int = 40) -> list[dict[str, Any]]:
+    with _managed_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM evidence_bank
+            WHERE user_id = ?
+            ORDER BY updated_at DESC, id DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        ).fetchall()
+    items = [dict(row) for row in rows]
+    for item in items:
+        try:
+            item["tags"] = json.loads(str(item.get("tags_json") or "[]"))
+        except json.JSONDecodeError:
+            item["tags"] = []
+    return items
 
 
 def latest_draft_by_kind(user_id: int) -> dict[str, dict[str, Any]]:

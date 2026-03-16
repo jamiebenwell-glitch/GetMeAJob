@@ -1,4 +1,9 @@
-REVIEWER_CASES = [
+from __future__ import annotations
+
+from copy import deepcopy
+
+
+BASE_REVIEWER_CASES = [
     {
         "name": "mechanical_placement_strong_fit",
         "job": "Mechanical Engineering Placement. Need CAD, manufacturing, testing, and analysis support across prototype builds.",
@@ -108,3 +113,44 @@ REVIEWER_CASES = [
         "must_include": ["python", "api"],
     },
 ]
+
+
+def _clamp(value: int, lower: int = 0, upper: int = 100) -> int:
+    return max(lower, min(value, upper))
+
+
+def _variant(case: dict[str, object], suffix: str, *, job: str | None = None, cv: str | None = None, cover: str | None = None, widen: int = 6) -> dict[str, object]:
+    variant = deepcopy(case)
+    variant["name"] = f"{case['name']}_{suffix}"
+    variant["job"] = job if job is not None else str(case["job"])
+    variant["cv"] = cv if cv is not None else str(case["cv"])
+    variant["cover"] = cover if cover is not None else str(case["cover"])
+    variant["score_min"] = _clamp(int(case["score_min"]) - widen)
+    variant["score_max"] = _clamp(int(case["score_max"]) + widen)
+    return variant
+
+
+def _variants_for_case(case: dict[str, object]) -> list[dict[str, object]]:
+    job = str(case["job"])
+    cv = str(case["cv"])
+    cover = str(case["cover"])
+    first_job = job.replace(". ", ".\n", 1)
+    return [
+        deepcopy(case),
+        _variant(case, "multiline_job", job=first_job),
+        _variant(case, "cv_headings", cv=f"Education\n{cv}\nProjects\nCollaborated with teams and documented progress."),
+        _variant(case, "cover_headings", cover=f"Motivation\n{cover}\nEvidence\nI want to contribute quickly and learn from the team."),
+        _variant(case, "structured_docs", cv=cv.replace(". ", ".\n"), cover=cover.replace(". ", ".\n")),
+        _variant(case, "expanded_cv", cv=f"{cv} Worked across teams, documented results, and communicated clearly."),
+        _variant(case, "expanded_cover", cover=f"{cover} I would value the chance to contribute quickly and learn from experienced engineers."),
+        _variant(case, "spaced_format", job=f"  {job}  ", cv=f"\n{cv}\n", cover=f"\n{cover}\n"),
+        _variant(
+            case,
+            "project_context",
+            cv=f"{cv} Final-year project context: owned delivery, testing, and reporting.",
+            cover=f"{cover} My project work gives me a solid base for this role.",
+        ),
+    ]
+
+
+REVIEWER_CASES = [variant for case in BASE_REVIEWER_CASES for variant in _variants_for_case(case)]

@@ -23,7 +23,7 @@ def _get_free_port() -> int:
         return sock.getsockname()[1]
 
 
-def _wait_for_server(url: str, timeout_seconds: int = 40) -> None:
+def _wait_for_server(url: str, timeout_seconds: int = 60) -> None:
     end = time.time() + timeout_seconds
     while time.time() < end:
         try:
@@ -67,7 +67,11 @@ def run_server():
             yield base_url
         finally:
             process.terminate()
-            process.wait(timeout=10)
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
 
 
 class ReviewerPage:
