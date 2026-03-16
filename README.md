@@ -1,43 +1,64 @@
 # GetMeAJob
 
-Fetch Mechanical Engineering Year in Industry roles using a compliant API source, and review CVs/cover letters against a job post.
+Engineering jobs board, CV and cover-letter reviewer, and interview-prep workspace for UK early-career roles.
 
 ## Why not Gradcracker
 Gradcracker's terms prohibit automated scraping or downloading of their site content. This project avoids scraping Gradcracker directly and uses an API-based source instead.
 
 ## Setup
-1. Install Python 3.11+.
-2. Create an Adzuna developer account and obtain `ADZUNA_APP_ID` and `ADZUNA_APP_KEY`.
-3. Set environment variables:
-
-```powershell
-$env:ADZUNA_APP_ID = "your_app_id"
-$env:ADZUNA_APP_KEY = "your_app_key"
-```
-
-4. Install dependencies:
+1. Install Python 3.12.
+2. Create a local `.env` or set environment variables directly.
+3. Install dependencies:
 
 ```powershell
 pip install -r requirements.txt
 ```
 
-## Run
-Use the helper script (sets `PYTHONPATH=src`):
+Core environment variables:
 
 ```powershell
-./scripts/fetch_mech_yii.ps1
+$env:SESSION_SECRET = "replace-with-a-long-random-secret"
+$env:PUBLIC_BASE_URL = "http://127.0.0.1:8010"
+$env:SESSION_HTTPS_ONLY = "0"
 ```
 
-Or run directly:
+Optional environment variables:
 
 ```powershell
-$env:PYTHONPATH = "src"
-python -m getmeajob.cli adzuna
+$env:GOOGLE_CLIENT_ID = "your_google_client_id"
+$env:GOOGLE_CLIENT_SECRET = "your_google_client_secret"
+$env:ADZUNA_APP_ID = "your_adzuna_app_id"
+$env:ADZUNA_APP_KEY = "your_adzuna_app_key"
 ```
 
-Outputs:
-- `data/adzuna_mech_year_in_industry.json`
-- `data/adzuna_mech_year_in_industry.csv`
+The checked-in `.env.example` shows the current app-level variables.
+
+## Run The Web App
+Use the helper script:
+
+```powershell
+./scripts/start_web.ps1
+```
+
+Open `http://127.0.0.1:8010`.
+
+The web app supports:
+- Official-source job browsing with filters and one-click handoff into review.
+- Multi-application review in one workspace.
+- CV and cover-letter uploads in `.txt`, `.pdf`, and `.docx`.
+- Saved drafts, revision history, review history, and an evidence bank when signed in.
+- Requirement-to-evidence mapping, grounded chat follow-up, and interview prep.
+- Reviewer safety filters that keep demographic questionnaires and admin gate text out of requirement coaching.
+
+Google sign-in is optional locally, but required if you want saved drafts and history tied to an account.
+
+## Release Gate
+
+```powershell
+./scripts/run_release_checks.ps1
+```
+
+The release gate runs tests, reviewer benchmark and audit, milestone browser coverage, and refreshes the official company-feed data.
 
 ## Notes
 - The filter is keyword-based. Adjust `--query` or the keywords in `src/getmeajob/providers/adzuna.py` if needed.
@@ -71,24 +92,6 @@ python -m getmeajob.cli review --job job.txt --cv cv.txt --cover-letter cover.tx
 
 The command prints JSON with a total percentage score plus category scores and feedback.
 
-## Web App
-Run the reviewer as a web app that accepts multiple applications per submission.
-
-```powershell
-./scripts/start_web.ps1
-```
-
-Open `http://127.0.0.1:8010` in your browser.
-
-The web app supports:
-- Job advert URL input, with page text extracted when the page is publicly readable.
-- CV uploads in `.txt`, `.pdf`, and `.docx`.
-- Cover letter uploads in `.txt`, `.pdf`, and `.docx`.
-- A tabbed reviewer/results workspace so the review stays in view after submission.
-- Suggested edits with highlighted weak excerpts in the review output.
-- Role suggestions based on the uploaded CV against the live jobs board.
-- Automated browser tests for the upload-and-review flow and the workspace layout.
-
 ## Hosted Deployment
 Render is the recommended host for this app.
 
@@ -98,6 +101,8 @@ Render is the recommended host for this app.
 - `render.yaml` provides a Render service definition with a health check.
 - The app reads `HOST` and `PORT` from the environment for hosted runtimes.
 - `GET /healthz` returns a simple readiness response for the platform health check.
+- Set `SESSION_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `PUBLIC_BASE_URL` in the Render dashboard.
+- Keep secrets out of git and rotate any credentials that were ever pasted into chat or logs.
 
 Example local container run:
 
@@ -107,7 +112,7 @@ docker run -p 8000:8000 getmeajob
 ```
 
 ## Agent Setup
-The repo now includes an explicit multi-agent setup in `agents/`.
+The repo includes an explicit multi-agent setup in `agents/`.
 
 Core agent specs:
 - `agents/source_compliance.md`
@@ -119,8 +124,3 @@ Core agent specs:
 Registry:
 - `agents/registry.json`
 
-Release check runner:
-
-```powershell
-./scripts/run_release_checks.ps1
-```
