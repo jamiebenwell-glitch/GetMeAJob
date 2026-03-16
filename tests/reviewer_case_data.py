@@ -112,6 +112,19 @@ BASE_REVIEWER_CASES = [
         "score_max": 85,
         "must_include": ["python", "api"],
     },
+    {
+        "name": "demographic_questionnaire_text_is_ignored",
+        "job": (
+            "Graduate Mechanical Engineer. Need CAD, manufacturing, testing, and analysis. "
+            "To do this, we must ask applicants and employees if they have a disability or have ever had one."
+        ),
+        "cv": "Mechanical engineering student with CAD, testing, manufacturing, and analysis project work. Improved fixture setup time by 15%.",
+        "cover": "I want this graduate role because it matches my CAD, testing, and manufacturing experience.",
+        "score_min": 62,
+        "score_max": 90,
+        "must_include": ["cad", "testing"],
+        "must_exclude": ["disability", "applicants", "employees", "ever"],
+    },
 ]
 
 

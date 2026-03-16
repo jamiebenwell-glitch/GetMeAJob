@@ -67,3 +67,60 @@ def test_review_chat_uses_truth_preserving_rewrite_path() -> None:
     reply = answer_review_question(payload, "Rewrite this CV bullet")
 
     assert "Keep the truth of" in reply
+
+
+def test_review_chat_filters_protected_attribute_prompts_from_bad_payload() -> None:
+    payload = {
+        "job": (
+            "Graduate Mechanical Engineer. Need CAD, manufacturing, testing, and analysis. "
+            "To do this, we must ask applicants and employees if they have a disability or have ever had one."
+        ),
+        "cv_text": "Mechanical engineering student with CAD, testing, manufacturing, and analysis project work.",
+        "cover_text": "I want this graduate role because it matches my CAD and manufacturing experience.",
+        "notes": ["Focus on stronger evidence for analysis."],
+        "missing_keywords": ["disability", "analysis"],
+        "keyword_overlap": ["cad", "testing", "manufacturing"],
+        "categories": [{"label": "Technical", "coverage": 72, "missing_keywords": ["analysis"]}],
+        "tailored_advice": [
+            {
+                "source": "cv",
+                "reason": "Protected-attribute noise should never surface.",
+                "excerpt": "To do this, we must ask applicants and employees if they have a disability or have ever had one.",
+                "suggestion": "Add disability evidence.",
+                "target_requirements": ["disability"],
+            }
+        ],
+        "requirement_evidence": [
+            {
+                "requirement": "disability",
+                "status": "missing",
+                "cv_evidence": [],
+                "cover_evidence": [],
+                "target_line": "To do this, we must ask applicants and employees if they have a disability or have ever had one.",
+            },
+            {
+                "requirement": "analysis",
+                "status": "missing",
+                "cv_evidence": [],
+                "cover_evidence": [],
+                "target_line": "Need CAD, manufacturing, testing, and analysis.",
+            },
+        ],
+        "follow_up_questions": [
+            "Do you have any real example of disability that is not yet in the CV or cover letter?",
+            "Do you have any real example of analysis that is not yet in the CV or cover letter?",
+        ],
+        "interview_questions": [
+            "Tell me about a time you used disability.",
+            "Tell me about a time you used analysis.",
+        ],
+        "role_suggestions": [],
+    }
+
+    add_reply = answer_review_question(payload, "What experience should I add?")
+    map_reply = answer_review_question(payload, "Show me the requirement map")
+    interview_reply = answer_review_question(payload, "What interview questions will they ask?")
+
+    combined = " ".join([add_reply, map_reply, interview_reply]).lower()
+    assert "disability" not in combined
+    assert "analysis" in combined

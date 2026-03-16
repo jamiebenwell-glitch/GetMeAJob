@@ -99,10 +99,12 @@ class ReviewerPage:
         target.get_by_label("Upload cover letter file").set_input_files(cover_path)
 
     def submit_review(self) -> None:
-        self.page.get_by_role("button", name="Review", exact=True).first.click(no_wait_after=True)
+        with self.page.expect_navigation(wait_until="domcontentloaded"):
+            self.page.get_by_role("button", name="Review", exact=True).first.click()
 
     def wait_for_results(self) -> None:
-        self.page.wait_for_selector("text=Scored applications")
+        self.page.wait_for_load_state("domcontentloaded")
+        self.page.wait_for_selector("text=Scored applications", timeout=60000)
 
     def add_application(self) -> None:
         self.page.get_by_role("button", name="Add another").first.click()

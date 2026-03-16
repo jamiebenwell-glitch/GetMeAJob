@@ -171,3 +171,29 @@ def test_reviewer_does_not_overpenalize_missing_preferred_requirement() -> None:
     assert result.score.relevance >= 60
     assert result.score.total >= 60
     assert "cad" in result.keyword_overlap
+
+
+def test_reviewer_ignores_demographic_questionnaire_text() -> None:
+    result = review(
+        (
+            "Graduate Mechanical Engineer. Need CAD, manufacturing, testing, and analysis. "
+            "To do this, we must ask applicants and employees if they have a disability or have ever had one."
+        ),
+        "Mechanical engineering student with CAD, testing, manufacturing, and analysis project work. Improved fixture setup time by 15%.",
+        "I want this graduate role because it matches my CAD, testing, and manufacturing experience.",
+    )
+
+    blocked_terms = {"applicants", "employees", "disability", "ever"}
+    combined_keywords = {item.lower() for item in result.keyword_overlap + result.missing_keywords}
+    assert blocked_terms.isdisjoint(combined_keywords)
+    assert all(
+        not any(term in item.requirement.lower() or term in item.target_line.lower() for term in blocked_terms)
+        for item in result.requirement_evidence
+    )
+    combined_guidance = " ".join(
+        result.follow_up_questions
+        + result.interview_questions
+        + [item.suggestion for item in result.tailored_advice]
+    ).lower()
+    assert all(term not in combined_guidance for term in blocked_terms)
+    assert result.score.relevance >= 60

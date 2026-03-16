@@ -22,3 +22,17 @@ def test_reviewer_benchmark_cases(case: dict[str, object]) -> None:
     if required_note:
         notes = " ".join(result.notes).lower()
         assert required_note in notes
+
+    blocked_text = " ".join(
+        result.keyword_overlap
+        + result.missing_keywords
+        + result.notes
+        + result.follow_up_questions
+        + result.interview_questions
+        + [item.requirement for item in result.requirement_evidence]
+        + [item.target_line for item in result.requirement_evidence]
+        + [item.reason for item in result.tailored_advice]
+        + [item.suggestion for item in result.tailored_advice]
+    ).lower()
+    for forbidden in case.get("must_exclude", []):
+        assert str(forbidden).lower() not in blocked_text

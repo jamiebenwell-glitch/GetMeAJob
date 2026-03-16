@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from typing import Any
 
+from getmeajob.reviewer import _is_sensitive_requirement_text
+
 
 def _normalize_items(values: list[Any] | None) -> list[str]:
     if not isinstance(values, list):
         return []
-    return [str(value).strip() for value in values if str(value).strip()]
+    return [
+        str(value).strip()
+        for value in values
+        if str(value).strip() and not _is_sensitive_requirement_text(str(value))
+    ]
 
 
 def _segments(text: str) -> list[str]:
@@ -35,7 +41,22 @@ def _tailored_by_source(application: dict[str, Any], source: str) -> list[dict[s
     advice_items = application.get("tailored_advice") or []
     if not isinstance(advice_items, list):
         return []
-    return [item for item in advice_items if str(item.get("source") or "") == source]
+    filtered: list[dict[str, Any]] = []
+    for item in advice_items:
+        if str(item.get("source") or "") != source:
+            continue
+        combined = " ".join(
+            [
+                str(item.get("reason") or ""),
+                str(item.get("excerpt") or ""),
+                str(item.get("suggestion") or ""),
+                " ".join(_normalize_items(item.get("target_requirements"))),
+            ]
+        )
+        if _is_sensitive_requirement_text(combined):
+            continue
+        filtered.append(item)
+    return filtered
 
 
 def _top_suggestion(application: dict[str, Any]) -> dict[str, Any] | None:
@@ -49,7 +70,20 @@ def _requirement_map(application: dict[str, Any]) -> list[dict[str, Any]]:
     items = application.get("requirement_evidence") or []
     if not isinstance(items, list):
         return []
-    return items
+    filtered: list[dict[str, Any]] = []
+    for item in items:
+        combined = " ".join(
+            [
+                str(item.get("requirement") or ""),
+                str(item.get("target_line") or ""),
+                " ".join(_normalize_items(item.get("cv_evidence"))),
+                " ".join(_normalize_items(item.get("cover_evidence"))),
+            ]
+        )
+        if _is_sensitive_requirement_text(combined):
+            continue
+        filtered.append(item)
+    return filtered
 
 
 def _evidence_lines(text: str, terms: list[str], limit: int = 2) -> list[str]:

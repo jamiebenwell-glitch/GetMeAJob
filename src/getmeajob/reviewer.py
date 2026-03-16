@@ -30,6 +30,30 @@ GENERIC_TERMS = {
     "opportunity", "responsibilities", "responsibility", "skills", "support", "team", "teams",
     "graduate", "placement", "internship", "industry", "year", "analyst", "apprentice",
 }
+SENSITIVE_REQUIREMENT_TERMS = {
+    "accommodation", "accommodations", "applicant", "applicants", "demographic", "demographics",
+    "disability", "disabled", "employee", "employees", "ethnicity", "gender", "gender identity",
+    "marital status", "national origin", "pregnancy", "race", "religion", "self-identification",
+    "sexual orientation", "veteran", "voluntary",
+}
+SENSITIVE_FALLBACK_TOKENS = {
+    "accommodation", "accommodations", "applicant", "applicants", "demographic", "disability",
+    "disabled", "employee", "employees", "ethnicity", "ever", "gender", "marital", "orientation",
+    "pregnancy", "questionnaire", "race", "religion", "survey", "veteran", "voluntary",
+}
+NON_REQUIREMENT_PATTERNS = (
+    "applicants and employees",
+    "diversity and inclusion",
+    "equal opportunity",
+    "equal opportunities",
+    "gender identity",
+    "have ever had one",
+    "if they have a disability",
+    "reasonable accommodation",
+    "sexual orientation",
+    "to do this, we must ask",
+    "voluntary self-identification",
+)
 
 IMPACT_VERBS = {
     "achieved", "automated", "built", "created", "delivered", "designed", "developed", "drove",
@@ -271,6 +295,8 @@ def _tokenize(text: str) -> list[str]:
             continue
         if token in GENERIC_TERMS:
             continue
+        if token in SENSITIVE_FALLBACK_TOKENS:
+            continue
         normalized.append(token)
     return normalized
 
@@ -440,6 +466,68 @@ def _split_segments(text: str) -> list[str]:
     raw_segments = re.split(r"\n+|(?<=[.!?])\s+", text)
     return [segment.strip() for segment in raw_segments if segment.strip()]
 
+
+def _mentions_term(text: str, term: str) -> bool:
+    normalized = f" {_normalize_text(text)} "
+    if " " in term or "-" in term:
+        return term in normalized
+    return re.search(rf"\b{re.escape(term)}\b", normalized) is not None
+
+
+def _is_sensitive_requirement_text(text: str) -> bool:
+    lowered = _normalize_text(text)
+    if not lowered:
+        return False
+    if lowered in SENSITIVE_FALLBACK_TOKENS:
+        return True
+    if any(_mentions_term(lowered, term) for term in SENSITIVE_REQUIREMENT_TERMS):
+        if len(lowered.split()) <= 6:
+            return True
+        if any(
+            marker in lowered
+            for marker in (
+                "add ",
+                "evidence",
+                "example of",
+                "experience",
+                "missing",
+                "prove",
+                "question",
+                "requirement",
+                "tell me about",
+                "used ",
+            )
+        ):
+            return True
+    if any(pattern in lowered for pattern in NON_REQUIREMENT_PATTERNS):
+        return True
+    protected_hits = sum(1 for term in SENSITIVE_REQUIREMENT_TERMS if _mentions_term(lowered, term))
+    compliance_hits = sum(
+        1
+        for term in (
+            "accommodation",
+            "applicant",
+            "applicants",
+            "employee",
+            "employees",
+            "equal opportunity",
+            "questionnaire",
+            "self-identification",
+            "survey",
+            "voluntary",
+        )
+        if _mentions_term(lowered, term)
+    )
+    return protected_hits >= 2 and compliance_hits >= 1
+
+
+def _is_requirement_noise_line(line: str) -> bool:
+    lowered = _normalize_text(line)
+    if not lowered:
+        return True
+    return _is_sensitive_requirement_text(lowered)
+
+
 def _line_priority(line: str) -> tuple[float, str]:
     lowered = line.lower()
     for weight, markers, label in REQUIREMENT_PRIORITY_HINTS:
@@ -451,16 +539,21 @@ def _line_priority(line: str) -> tuple[float, str]:
 def _extract_requirement_signals(job_text: str) -> list[RequirementSignal]:
     signals: list[RequirementSignal] = []
     seen: set[tuple[str, str]] = set()
-    segments = _split_segments(job_text)
-    title = segments[0] if segments else job_text
+    segments = [segment for segment in _split_segments(job_text) if not _is_requirement_noise_line(segment)]
+    if not segments:
+        return signals
+
+    title = segments[0]
     title_concepts = _extract_concepts(title)
     for concept in title_concepts:
+        if _is_sensitive_requirement_text(concept):
+            continue
         signals.append(RequirementSignal(concept=concept, weight=TITLE_CONCEPT_BOOST, priority="title", source_line=title.strip()))
         seen.add((concept, title.strip()))
 
     for token in _extract_keywords(title, limit=5):
         concept = CONCEPT_INDEX.get(token)
-        if concept or token in GENERIC_TERMS or token in STOPWORDS:
+        if concept or token in GENERIC_TERMS or token in STOPWORDS or _is_sensitive_requirement_text(token):
             continue
         pair = (token, title.strip())
         if pair in seen:
@@ -468,13 +561,15 @@ def _extract_requirement_signals(job_text: str) -> list[RequirementSignal]:
         signals.append(RequirementSignal(concept=token, weight=TITLE_TOKEN_BOOST, priority="title", source_line=title.strip()))
         seen.add(pair)
 
-    for line in _split_segments(job_text):
+    for line in segments:
         if _word_count(line) < 4:
             continue
         weight, priority = _line_priority(line)
         concepts = _extract_concepts(line)
         if concepts:
             for concept, count in concepts.items():
+                if _is_sensitive_requirement_text(concept):
+                    continue
                 pair = (concept, line)
                 if pair in seen:
                     continue
@@ -490,7 +585,7 @@ def _extract_requirement_signals(job_text: str) -> list[RequirementSignal]:
             continue
 
         for token in _extract_keywords(line, limit=4):
-            if token in GENERIC_TERMS:
+            if token in GENERIC_TERMS or _is_sensitive_requirement_text(token):
                 continue
             pair = (token, line)
             if pair in seen:
@@ -510,6 +605,8 @@ def _category_for_concept(concept: str) -> str:
 def _build_requirement_map(job_text: str) -> dict[str, RequirementSignal]:
     aggregated: dict[str, RequirementSignal] = {}
     for signal in _extract_requirement_signals(job_text):
+        if _is_sensitive_requirement_text(signal.concept) or _is_requirement_noise_line(signal.source_line):
+            continue
         current = aggregated.get(signal.concept)
         if current is None or signal.weight > current.weight:
             aggregated[signal.concept] = signal

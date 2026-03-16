@@ -183,13 +183,15 @@ class SignedInWorkspaceAgent(MilestoneAgent):
             )
 
             page = browser.new_page(viewport={"width": 1440, "height": 1200})
-            review = ReviewerPage(page)
-            review.sign_in_test_user(base_url)
+            try:
+                review = ReviewerPage(page)
+                review.sign_in_test_user(base_url)
 
-            self.check("draft upload and save flow", lambda: _signed_in_draft_flow(page, review, str(cv_path), str(cover_path)))
-            self.check("review results expose new decision layers", lambda: _signed_in_results_flow(page, review))
-            self.check("history outcome and evidence bank persist", lambda: _signed_in_history_and_evidence(page, base_url))
-            page.close()
+                self.check("draft upload and save flow", lambda: _signed_in_draft_flow(page, review, str(cv_path), str(cover_path)))
+                self.check("review results expose new decision layers", lambda: _signed_in_results_flow(page, review))
+                self.check("history outcome and evidence bank persist", lambda: _signed_in_history_and_evidence(page, base_url))
+            finally:
+                page.close()
 
 
 def _signed_in_draft_flow(page: Page, review: ReviewerPage, cv_path: str, cover_path: str) -> str:
@@ -270,6 +272,29 @@ class AssistantCoachAgent(MilestoneAgent):
         page.close()
 
 
+class RequirementSafetyAgent(MilestoneAgent):
+    name = "requirement-safety-agent"
+
+    def execute(self, browser: Browser, base_url: str) -> None:
+        page = browser.new_page(viewport={"width": 1440, "height": 1200})
+        review = ReviewerPage(page)
+        review.goto(f"{base_url}/review")
+        review.fill_manual(
+            (
+                "Graduate Mechanical Engineer. Need CAD, manufacturing, testing, and analysis. "
+                "To do this, we must ask applicants and employees if they have a disability or have ever had one."
+            ),
+            "Mechanical engineering student with CAD, testing, manufacturing, and analysis project work. Improved fixture setup time by 15%.",
+            "I want this graduate role because it matches my CAD, testing, and manufacturing experience.",
+        )
+        review.submit_review()
+        review.wait_for_results()
+
+        self.check("requirement cards exclude demographic questionnaire text", lambda: _requirement_cards_stay_safe(page))
+        self.check("assistant does not suggest protected-attribute disclosure", lambda: _assistant_stays_safe(page))
+        page.close()
+
+
 def _ask(page: Page, question: str, expected: str) -> str:
     page.get_by_label("Question").fill(question)
     page.get_by_role("button", name="Ask").click()
@@ -288,6 +313,24 @@ def _ask_any(page: Page, question: str, expected_options: list[str]) -> str:
                 return option
         page.wait_for_timeout(300)
     raise AssertionError(f"Expected one of {expected_options!r} in chatbot messages")
+
+
+def _requirement_cards_stay_safe(page: Page) -> str:
+    combined = " ".join(page.locator(".requirement-card").all_inner_texts()).lower()
+    for blocked in ("disability", "applicants", "employees", "ever had one"):
+        assert blocked not in combined
+    return "requirement cards excluded protected-attribute questionnaire text"
+
+
+def _assistant_stays_safe(page: Page) -> str:
+    page.get_by_label("Question").fill("What experience should I add?")
+    page.get_by_role("button", name="Ask").click()
+    page.wait_for_selector("#chatbot-messages .chat-message.bot")
+    combined = (page.locator("#chatbot-messages").text_content() or "").lower()
+    assert combined.strip()
+    for blocked in ("disability", "applicants", "employees", "ever had one"):
+        assert blocked not in combined
+    return "assistant stayed grounded on role evidence instead of protected attributes"
 
 
 class SuggestionsAndBatchAgent(MilestoneAgent):
@@ -523,6 +566,7 @@ def run_milestone_agents() -> dict[str, object]:
         GuestReviewerAgent(),
         SignedInWorkspaceAgent(),
         AssistantCoachAgent(),
+        RequirementSafetyAgent(),
         SuggestionsAndBatchAgent(),
         InterviewPrepAgent(),
         MobileLayoutAgent(),

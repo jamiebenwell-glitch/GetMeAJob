@@ -302,3 +302,33 @@ def test_browser_review_keeps_senior_mismatch_score_low() -> None:
 
         assert int(page.locator(".score").first.text_content().strip().rstrip("%")) <= 35
         browser.close()
+
+
+def test_browser_review_ignores_demographic_questionnaire_text() -> None:
+    with run_server() as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1200})
+        review = ReviewerPage(page)
+        review.goto(f"{base_url}/review")
+        review.fill_manual(
+            (
+                "Graduate Mechanical Engineer. Need CAD, manufacturing, testing, and analysis. "
+                "To do this, we must ask applicants and employees if they have a disability or have ever had one."
+            ),
+            "Mechanical engineering student with CAD, testing, manufacturing, and analysis project work. Improved fixture setup time by 15%.",
+            "I want this graduate role because it matches my CAD, testing, and manufacturing experience.",
+        )
+        review.submit_review()
+        review.wait_for_results()
+
+        requirement_text = " ".join(page.locator(".requirement-card").all_inner_texts()).lower()
+        assert "disability" not in requirement_text
+        assert "applicants" not in requirement_text
+        assert "employees" not in requirement_text
+
+        page.get_by_label("Question").fill("What experience should I add?")
+        page.get_by_role("button", name="Ask").click()
+        page.wait_for_selector(".chat-message.bot")
+        chat_text = (page.locator("#chatbot-messages").text_content() or "").lower()
+        assert "disability" not in chat_text
+        browser.close()
